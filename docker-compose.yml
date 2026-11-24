@@ -1,0 +1,50 @@
+name: resibo
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${RESIBO_IMAGE:-resibo-api}:${RESIBO_TAG:-current}
+    container_name: resibo-api
+    restart: unless-stopped
+
+    # Which env file supplies the values depends on the environment:
+    #   local   → .env.dev (the default)
+    #   server  → RESIBO_ENV_FILE=/opt/resibo/resibo.env
+    # It is never baked into the image — see .dockerignore.
+    env_file:
+      - path: ${RESIBO_ENV_FILE:-./.env.dev}
+        required: false
+
+    environment:
+      # The container always listens on 8080 internally, whatever the host
+      # port is. This keeps one image identical across environments.
+      SERVER_PORT: 8080
+      APP_ENV: ${APP_ENV:-dev}
+
+    # Bound to loopback only. Nothing reaches this container except nginx on
+    # the same host, which is in turn the only thing the Cloudflare tunnel
+    # talks to. The container is never exposed on the LAN.
+    ports:
+      - "127.0.0.1:${HOST_PORT:-8083}:8080"
+
+    # Lets the container reach services on the host — notably the MariaDB
+    # instance — as host.docker.internal, once persistence is added.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/actuator/health"]
+      interval: 15s
+      timeout: 3s
+      start_period: 40s
+      retries: 5
+
+    # Without this, container logs grow until the disk is full. The server
+    # already hosts several apps; none of them should be able to do that.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

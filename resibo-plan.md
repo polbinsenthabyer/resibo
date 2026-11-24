@@ -5,8 +5,11 @@
 > disagree, one of them is a bug: either the code drifted, or this file went
 > stale and must be corrected in the same change that revealed it.
 
-**Status: planning. No code exists yet, and none should be written until the
-`[BLOCKER]` items below are answered.**
+**Status: planning, with a skeleton.** A buildable Spring Boot application now
+exists — scaffold, response envelope, health endpoint, green tests (§5.1) — but
+there is no domain code, no schema, and no database connection. **Every
+`[BLOCKER]` item below is still unanswered, and nothing that depends on one
+should be written until it is.**
 
 ---
 
@@ -52,12 +55,12 @@
 
 | Field | Value |
 |---|---|
-| Document version | 0.4 — template, not yet filled in |
+| Document version | 0.5 — scaffold recorded; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-24 |
-| Last updated by | Claude (initial template) |
-| Plan status | **AWAITING OWNER INPUT** |
-| Working copy | `C:\Users\okarun\sprintify_solutions\personal\resibo` |
+| Last updated by | Claude (reconciled with the committed scaffold) |
+| Plan status | **AWAITING OWNER INPUT** — a skeleton exists (§5.1), but every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
+| Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
 | This document lives on | branch `dev/api/resibo` — see §7.1 |
 | Vault notes | `Obsidian Vault/Projects/personal/resibo/` |
@@ -335,28 +338,38 @@ wrong or missing; the names matter less than the shapes.
 ## 5. Tech stack
 
 **Decided by owner, 2026-11-24:** Spring Boot backend · React frontend ·
-MariaDB database · **modular monolith** for the backend structure. Those are
-settled. The rest below are the choices that hang off them.
+MariaDB database. Those three are settled. The **modular monolith** was decided
+here too, and is the one item on that list that has since changed — the code is
+layer-first; see §6.1. The rest below are the choices that hang off them.
+
+The "Your decision" column now records what the scaffold **actually uses** where
+a choice has been made in code, and says **open** where nothing has been chosen.
+"In use" means it is in `pom.xml` or `application.yaml` today; see §5.1.
 
 | Choice | My recommendation | Your decision |
 |---|---|---|
-| Java version | 21 (LTS) | |
-| Spring Boot version | latest 3.x | |
-| Build tool | Maven — more examples, easier handover | |
-| API style | REST + JSON | |
-| API docs | OpenAPI generated from the controllers | |
-| DB migrations | Flyway, versioned SQL committed to the repo | |
-| Persistence | Spring Data JPA, with plain SQL where reporting needs it | |
-| Auth | Short-lived JWT access token + refresh; roles from §1.3 | |
-| Frontend build | Vite | |
-| Frontend language | TypeScript | |
-| Server state | TanStack Query | |
-| UI components | shadcn/ui on Tailwind | |
-| Routing | React Router | |
-| Backend tests | JUnit 5 + Testcontainers against real MariaDB | |
-| Frontend tests | Vitest + React Testing Library; Playwright for checkout | |
-| Local database | Docker Compose for MariaDB | |
-| Repo layout | One repo: `backend/` and `frontend/` | |
+| Java version | 21 (LTS) | **17 — in use.** Matches gainsoclock, and 17 is the only JDK on this machine (§5.1). |
+| Spring Boot version | latest 3.x | **4.2.0 — in use.** The Boot 4 line, as gainsoclock uses, not 3.x. |
+| Build tool | Maven — more examples, easier handover | **Maven — in use**, through the committed `mvnw` wrapper (Maven itself is not installed locally). |
+| Packaging | `jar`, embedded server | **`jar` — in use.** See §5.1 on how the owner's "packaging: yaml" note was read. |
+| Configuration format | `application.yaml` | **YAML — in use**, `src/main/resources/application.yaml`. |
+| Boilerplate | Lombok, per §6.1.2 | **Lombok — in use**, `optional` scope. |
+| Runtime probes | Spring Boot Actuator | **Actuator — in use**; `health` and `info` exposed, details only `when-authorized`. |
+| Local restart | Spring Boot DevTools | **DevTools — in use**, `runtime` and `optional`. |
+| API style | REST + JSON | REST + JSON **as built** — though only one endpoint exists, so this is cheap to revisit. |
+| API docs | OpenAPI generated from the controllers | **Open** — no OpenAPI dependency in the pom. |
+| DB migrations | Flyway, versioned SQL committed to the repo | **Open** — no Flyway in the pom, no migrations, nothing to migrate. |
+| Persistence | Spring Data JPA, with plain SQL where reporting needs it | **Open** — no JPA starter and no JDBC driver in the pom. **The application connects to no database at all.** |
+| Auth | Short-lived JWT access token + refresh; roles from §1.3 | **Open** — no Spring Security; the health endpoint is unauthenticated. Blocked on §1.3. |
+| Frontend build | Vite | **Open** — no frontend code exists. |
+| Frontend language | TypeScript | **Open** |
+| Server state | TanStack Query | **Open** |
+| UI components | shadcn/ui on Tailwind | **Open** |
+| Routing | React Router | **Open** |
+| Backend tests | JUnit 5 + Testcontainers against real MariaDB | **JUnit 5 in use** (`spring-boot-starter-webmvc-test`, `spring-boot-starter-actuator-test`). **Testcontainers open** — nothing to containerise until persistence is decided. |
+| Frontend tests | Vitest + React Testing Library; Playwright for checkout | **Open** |
+| Local database | Docker Compose for MariaDB | **Open.** §7.2 found a working shared MariaDB; whether local work points at that or at a local container is undecided. |
+| Repo layout | One repo: `backend/` and `frontend/` | **Diverged.** The backend was scaffolded at the **repository root** — `pom.xml` and `src/` are top-level, there is no `backend/`. Where the frontend lives is therefore open again; see §5.1. |
 
 **Accept all recommendations, or state your changes:**
 
@@ -366,22 +379,156 @@ settled. The rest below are the choices that hang off them.
 > library, the sale screen needs deliberate keyboard handling — a design task in
 > its own right, not a component choice.
 
+### 5.1 The scaffold as it actually stands (2026-11-24)
+
+Generated from start.spring.io and committed as `2b6dcd6`. Recorded here so no
+session has to read the pom to learn what was chosen, and so nobody repeats the
+two traps below.
+
+| Field | Value |
+|---|---|
+| groupId / artifactId | `com.api` / `resibo` |
+| Name / description | `resibo` / "Resibo POS API" |
+| Version | `0.0.1-SNAPSHOT` |
+| Base package | `com.api.resibo` |
+| Java | 17 |
+| Spring Boot | 4.2.0 |
+| Build tool / packaging | Maven / `jar` |
+
+Dependencies, exactly as they stand in `pom.xml`:
+
+| Dependency | Scope | Why it is there |
+|---|---|---|
+| `spring-boot-starter-webmvc` | compile | What the owner's "spring-web" resolves to — **Boot 4 renamed that starter to `webmvc`**. Same as gainsoclock. |
+| `spring-boot-starter-actuator` | compile | `/actuator/health` for infrastructure probes |
+| `lombok` | compile, `optional` | The §6.1.2 boilerplate convention |
+| `spring-boot-devtools` | `runtime`, `optional` | Local restart on recompile |
+| `spring-boot-starter-webmvc-test` | `test` | MockMvc slice tests |
+| `spring-boot-starter-actuator-test` | `test` | Actuator slice |
+
+**Two traps, written down because they will recur:**
+
+1. **`4.2.0.RELEASE` does not exist in Maven Central.** Initializr's metadata
+   lists the version id as `4.2.0.RELEASE` and the generated pom used that
+   literally; Central answers **HTTP 404** for that coordinate, because Spring
+   Boot dropped the `.RELEASE` suffix years ago. The pom was corrected to
+   `4.2.0`, which is the current latest release. A session regenerating from
+   Initializr will hit this again — fix the parent version before the first
+   build, not after reading a confusing resolution error.
+2. **"packaging: yaml" was read as a configuration-format instruction, not a
+   Maven one.** Maven packaging is only `jar` or `war`, so the owner's note was
+   taken to mean YAML configuration — `application.yaml`, matching gainsoclock —
+   with `jar` packaging. That reading was stated to the owner and is **not yet
+   explicitly confirmed. Treat it as an assumption**, and correct it here if it
+   was meant differently.
+
+Beyond the build scaffolding — `pom.xml`, `mvnw`, `mvnw.cmd`, `.mvn/wrapper/`
+and `.gitattributes` — these are the files that were created. The pre-existing
+`.gitignore` was kept rather than Initializr's, because it is stricter: it
+already blocks `.env*`, keystores and `application-local.*`.
+
+```
+src/main/java/com/api/resibo/ResiboApplication.java
+src/main/java/com/api/resibo/controllers/HealthController.java
+src/main/java/com/api/resibo/dtos/ResponseDto.java
+src/main/java/com/api/resibo/types/ResponseType.java
+src/main/java/com/api/resibo/utilities/MessageType.java
+src/main/java/com/api/resibo/utilities/ResponseUtility.java
+src/main/resources/application.yaml
+src/test/java/com/api/resibo/ResiboApplicationTests.java
+src/test/java/com/api/resibo/controllers/HealthControllerTest.java
+```
+
+Note the paths: the backend sits at the repository root, not under `backend/` as
+§5 proposed. Nothing depends on that yet, but it reopens the question of where a
+frontend would live.
+
+`application.yaml` holds four things and no secrets: the application name
+(`resibo`); `server.port: ${SERVER_PORT:8080}`, so the port is an environment
+override with a sane default; the actuator exposure
+(`management.endpoints.web.exposure.include: health,info` and
+`management.endpoint.health.show-details: when-authorized`, so an anonymous
+caller learns liveness and nothing else); and `logging.level.com.api.resibo:
+INFO`.
+
+**The API surface, such as it is.** `HealthController` carries
+`@RequestMapping("api/health")` and `@GetMapping("/check")` — so `GET
+/api/health/check`, returning the standard envelope. gainsoclock also exposes a
+`/check/prelive` variant; it was deliberately left out, because no prelive
+environment has been decided for Resibo (§7). It costs one method to add when
+one exists.
+
+**Toolchain on this machine — the build will not run without this.** No JDK is
+on `PATH` and `JAVA_HOME` is unset. Maven is not installed either, which is why
+the wrapper is committed. A JDK 17 does exist — Microsoft Build of OpenJDK
+17.0.20, under `%USERPROFILE%\.jdks\ms-17.0.20`. `JAVA_HOME` has to be set
+**per shell, every shell**; that is the one real piece of friction in building
+this repository today, and it is why `README.md` spells the command out instead
+of saying "run Maven".
+
+**Verified, not assumed (2026-11-24):**
+
+| Check | Result |
+|---|---|
+| `./mvnw -B -U clean verify` | **BUILD SUCCESS** — `Tests run: 2, Failures: 0, Errors: 0` |
+| `GET /api/health/check` against the running jar | `200`, envelope intact: `responseType: SUCCESS`, `code: S0001`, `message: "Resibo API is healthy!"`, `className`/`methodName` resolved to `HealthController.healthCheck` |
+| `GET /actuator/health` | `200`, `{"groups":["liveness","readiness"],"status":"UP"}` |
+| An unmapped path | `404` |
+
+**One defect found, and deliberately left in the code.** `responseTime`
+serialises in **UTC**, not local time: the verified response read `03:27:49`
+while the machine's clock said `11:27:49` (UTC+08:00). `ResponseDto`'s
+`@JsonFormat` carries no timezone, and Spring's Jackson default is UTC. For a
+POS that prints timestamps on receipts this is a real problem; if §2.3 turns out
+to be B, it is potentially a compliance problem. The fix is one line —
+`spring.jackson.time-zone` — but timezone is an open owner question in §10, so
+applying it would be exactly the kind of quiet guess this document exists to
+prevent. Tracked as §12 #8 and recorded in §13.
+
 ---
 
 ## 6. Architecture
 
-### 6.1 Backend structure — modular monolith (decided)
+### 6.1 Backend structure — layer-first in the code, modular monolith deferred
 
-**Decided by owner, 2026-11-24:** the backend is a **modular monolith** — one
-deployable Spring Boot application, internally divided into modules with
-enforced boundaries, rather than either a layer-first package tree or separate
-services.
+**What the code actually is, as of 2026-11-24.** The backend is packaged
+**layer-first at the base package**, mirroring gainsoclock:
 
-What that means in practice, as I propose to apply it:
+```
+src/main/java/com/api/resibo/
+├── ResiboApplication.java
+├── controllers/     HealthController
+├── dtos/            ResponseDto
+├── types/           ResponseType
+└── utilities/       MessageType, ResponseUtility
+```
+
+There is no `modules/` package and no `shared/` package. There are no
+`entities/`, `repositories/` or `services/` packages yet either — those arrive
+flat, in gainsoclock's shape, with the first feature that needs them.
+
+That is **option A of §6.1.1**, not the modular monolith described below. It was
+taken because the owner's most recent and most specific structural instruction
+was to use gainsoclock as the reference, and the two instructions cannot both be
+honoured as written. **It supersedes the earlier modular-monolith decision — see
+§13 — and it is pending the owner's explicit confirmation**, which is why
+§6.1.1 stays open rather than being marked answered. Six files is the cheapest
+this reversal will ever be; if the answer is B, say so before the first domain
+module lands.
+
+**The deferred alternative, for the record.** What follows is the
+modular-monolith design as originally decided. **None of it exists on disk.** It
+is kept because it was a deliberate owner decision with a real rationale, and
+because it is still the better answer if module boundaries end up mattering more
+than parity with the sibling project — if §6.1.1 comes back as B, this is the
+target.
+
+What it would mean in practice:
 
 - **Package by feature, not by layer.** No top-level `controllers/`,
-  `services/`, `repositories/`. Each module owns its own web, service, and
-  persistence code.
+  `services/`, `repositories/` — which is precisely what the code has today, so
+  this is the bullet that option A trades away. Each module would own its own
+  web, service, and persistence code.
 - **Each module has a public face and a private inside.** Other modules may use
   only what the module deliberately exposes — its API interfaces and its DTOs.
   Entities and repositories stay package-private to the module.
@@ -392,10 +539,11 @@ What that means in practice, as I propose to apply it:
 - **One database, one schema, but each table has exactly one owning module.**
   Flyway migrations are named by owning module.
 
-Proposed layout — **a proposal, correct it before any code is written**:
+The layout it would produce — **aspirational; not a description of the
+repository**:
 
 ```
-backend/src/main/java/.../resibo/
+backend/src/main/java/.../resibo/        (note: the real code is at the repo root — §5.1)
 ├── ResiboApplication.java
 ├── shared/                  cross-cutting, no business rules
 │   ├── money/               money and rounding types
@@ -416,7 +564,7 @@ backend/src/main/java/.../resibo/
 
 ### 6.1.1 `[BLOCKER]` Reference project: gainsoclock — and a conflict to resolve
 
-The owner named `C:\Users\okarun\sprintify_solutions\personal\gainsoclock` as the
+The owner named `%USERPROFILE%\sprintify_solutions\personal\gainsoclock` as the
 reference for clean structure (2026-11-24). Its backend is Spring Boot 4.1.2 on
 Java 17, Maven, MariaDB — the same shape as Resibo.
 
@@ -444,6 +592,8 @@ rather than a quiet compromise:
       consistent with the sibling project, fastest to start. Abandons the
       modular-monolith decision; module boundaries cannot be enforced, because
       there are no modules.
+      **← this is what the code does today (§6.1, §5.1), pending the owner's
+      confirmation. The box stays unticked because the owner has not said it.**
 - [ ] **B — Modular monolith, with gainsoclock's conventions inside each module.**
       Keep feature modules and their boundaries; inside each one, use
       gainsoclock's familiar layer packages. Reads like gainsoclock locally while
@@ -467,7 +617,14 @@ rather than a quiet compromise:
 the modular monolith you chose and the gainsoclock conventions you want the code
 to read like. A costs you the boundaries; C defers the cost at interest.
 
-**Answer:**
+**Answer:** *Still needed from the owner.* **A is what the scaffold did on
+2026-11-24**, because "use gainsoclock as the structural reference" was the
+later and more specific instruction and something had to be chosen to put a file
+on disk. That is an interpretation, not an answer — so this question stays open,
+and a one-word reply closes it. Right now the whole backend is six classes in
+four packages; switching to B is minutes of work. After the first domain module
+it is hours, and after three it is the expensive kind of restructure option C
+warns about.
 
 ### 6.1.2 Conventions adopted from gainsoclock
 
@@ -488,12 +645,32 @@ the reference project read consistently, and none of them conflict with §6.1.
 | Config | `application.yaml`; `.env` and `.env.*` git-ignored |
 | Deployment | `scripts/deploy.sh`, `scripts/deploy-prelive.sh`; GitHub Actions at `.github/workflows/maven.yml` |
 
+**Which of those exist as of 2026-11-24.** Implemented: the `ResponseDto`
+envelope and its fields; `ResponseUtility.getSuccessResponse(message[, data])`
+and `getErrorResponse(code, message)` as static factories; the success code
+`S0001`; `ResponseType` as a `*Type` enum in `types/`; Lombok `@Data` /
+`@NoArgsConstructor` / `@AllArgsConstructor` on the DTO; `utilities/` for
+stateless helpers, which now holds `ResponseUtility` and a `MessageType` class
+of message constants; and `application.yaml` with `.env*` git-ignored.
+
+`ResponseUtility` fills `className` and `methodName` with `StackWalker`, taking
+the first stack frame outside itself — cleaner than gainsoclock's approach, same
+result, and verified to resolve correctly (§5.1).
+
+Not yet present, and not yet contradicted either: the interface +
+`XxxServiceImpl` service shape and "every service method returns `ResponseDto`"
+(there are no services), the `XxxDto` / `XxxListDto` pairing (there is one DTO),
+error codes beyond `S0001`, the deploy scripts, the GitHub Actions workflow, and
+the `.env.example` §8 promises.
+
 | Question | My recommendation | Your decision |
 |---|---|---|
-| Keep the `ResponseDto` envelope, including `className`/`methodName`? | Keep it for consistency with gainsoclock. Note that `className`/`methodName` leak internals to the client — I'd keep them out of error responses in production. | |
-| Match gainsoclock's Spring Boot 4.1.2 / Java 17 exactly? | Match Spring Boot 4.1.x. For Java, prefer 21 (LTS, and Boot 4 supports it) unless the server's JDK is 17 — §7 will decide that. | |
+| Keep the `ResponseDto` envelope, including `className`/`methodName`? | Keep it for consistency with gainsoclock. Note that `className`/`methodName` leak internals to the client — I'd keep them out of error responses in production. | **Kept, and implemented 2026-11-24** — all seven fields plus `isSuccess()`/`isFail()`, for gainsoclock consistency. **The caveat still stands and is not yet addressed:** `className`/`methodName` are populated on every response, including errors, and must be suppressed in production error responses before anything is exposed publicly. |
+| Match gainsoclock's Spring Boot 4.1.2 / Java 17 exactly? | Match Spring Boot 4.1.x. For Java, prefer 21 (LTS, and Boot 4 supports it) unless the server's JDK is 17 — §7 will decide that. | **Java 17 as gainsoclock; Spring Boot 4.2.0, not 4.1.2** — the current latest release, and what Initializr generated. Java 17 because it is the JDK that exists on this machine (§5.1); the server's JDK is still unverified (§7.2), so this may need revisiting. |
 
-**Open questions on the module structure:**
+**Open questions on the module structure.** All four only arise if §6.1.1 is
+answered **B**; under the layer-first code that exists today there are no
+modules to bound, which is exactly the cost option A carries.
 
 | Question | My recommendation | Your decision |
 |---|---|---|
@@ -519,7 +696,7 @@ Till (browser, React SPA)
   └── HTTPS / JSON
         │
         ▼
-Spring Boot modular monolith  (one deployable; modules per §6.1)
+Spring Boot application  (one deployable; packaged per §6.1 — layer-first today)
         │
         ▼
 MariaDB   ──►  nightly backup, off-machine   [see §10]
@@ -603,8 +780,8 @@ Remote: `https://github.com/polbinsenthabyer/resibo.git` — **public** (see §7
 **Naming (decided by owner, 2026-11-24):** the `api` segment distinguishes
 backend work from frontend work, matching the sibling project [gainsoclock],
 which uses `live/api/...` and `live/app/...`. A frontend branch would therefore
-be `dev/app/resibo`. The original `dev/api/resibo` was renamed to `dev/api/resibo`
-and deleted locally and on the remote; the commits are unchanged.
+be `dev/app/resibo`. The original `dev/resibo` was renamed to `dev/api/resibo`
+and the old name deleted locally and on the remote; the commits are unchanged.
 
 Consequences, so no session is surprised by them:
 
@@ -649,7 +826,7 @@ Never force-push. A rejected push is reported, not overridden.
 ### How to hand credentials over
 
 1. Put the value in a file **outside the repository** or already git-ignored —
-   for example `C:\Users\okarun\.secrets\resibo.env`.
+   for example `%USERPROFILE%\.secrets\resibo.env`.
 2. Tell me the **path**, not the value.
 3. I read it when a task needs it, use it, and never echo it back, never commit
    it, and never record it in a note.
@@ -687,7 +864,7 @@ Fill in the last three columns. **Leave the value out.**
 All values supplied so far live in one git-ignored file outside every repository:
 
 ```
-C:\Users\okarun\.secrets\resibo.env     (ACL-restricted to the owner's account)
+%USERPROFILE%\.secrets\resibo.env     (ACL-restricted to the owner's account)
 ```
 
 | Credential | Purpose | Where the value lives | Status |
@@ -773,7 +950,7 @@ tax summary for filing · statutory-discount summary.
 | Has a restore ever been tested? (It is not a backup until it has.) | |
 | How long sales data must be retained | |
 | Interface language(s) | |
-| Currency, date format, timezone | |
+| Currency, date format, timezone | ⚠️ **Open, and already producing a wrong value.** The running API serialises `responseTime` in **UTC** — `03:27:49` where the machine's clock read `11:27:49` (UTC+08:00). `ResponseDto`'s `@JsonFormat` sets no timezone and Spring's Jackson default is UTC, so every timestamp the API returns is eight hours behind local time. A receipt printed from that is simply wrong, and under §2.3 = B a wrong receipt timestamp is a compliance problem, not a cosmetic one. The fix is one property (`spring.jackson.time-zone`) and it was **deliberately not applied**, because picking the timezone is this row's job, not the code's. Answer the row and the fix lands with it. See §12 #8, §13, §5.1. |
 | Receipt paper width | |
 | Does the till run on a touchscreen, a keyboard, or both? | |
 
@@ -787,7 +964,7 @@ and judge.
 | Phase | Deliverable | Depends on |
 |---|---|---|
 | 0 | This document filled in; vault notes; git repo initialised | §1, §2 |
-| 1 | Module skeleton with boundary tests, MariaDB locally, migrations, login, roles | §5, §6.1 |
+| 1 | Application skeleton (plus boundary tests, if §6.1.1 is answered B), MariaDB locally, migrations, login, roles | §5, §6.1 |
 | 2 | Product catalog with barcodes and prices | §3 |
 | 3 | **Checkout**: ring up, tender, print a receipt | §2.1, §2.3, §2.5 |
 | 4 | Shift open/close, cash drawer, X and Z reading | §2.3 |
@@ -795,6 +972,18 @@ and judge.
 | 6 | Inventory movements and stock on hand | §3 |
 | 7 | Reports from §9 | §9 |
 | 8 | Server, domain, deployment, backups | §7, §8 |
+
+**Where this stands (2026-11-24).** Phase 1 is **partially delivered**. Done:
+the application skeleton, a working Maven build, the `ResponseDto` conventions,
+a health endpoint, and two passing tests — all verified in §5.1. Not done, and
+not started: the MariaDB connection (the pom has no JDBC driver and no JPA, so
+the application talks to no database at all), Flyway and the first migration,
+login, and roles. Boundary tests are not merely undone but currently moot —
+§6.1.1 went to layer-first, so there are no module boundaries to test.
+
+Of what remains in phase 1, migrations wait on the §4 schema, which waits on the
+§2 blockers; login and roles wait on §1.3. The database connection itself is the
+one piece that could move now.
 
 **Your changes:**
 
@@ -812,7 +1001,9 @@ and judge.
 | 4 | Tax model (§2.4) | every total on every screen | 2026-11-24 | open |
 | 5 | Stores and terminals (§2.2) | schema, receipt numbering | 2026-11-24 | open |
 | 6 | Roles and permissions (§1.3) | auth model | 2026-11-24 | open |
-| 7 | Module boundary enforcement (§6.1) | backend skeleton | 2026-11-24 | open |
+| 7 | Module boundary enforcement (§6.1) | backend skeleton | 2026-11-24 | moot until #9 — the code has no modules to enforce |
+| 8 | Timezone for serialised timestamps (§10) | every API timestamp, receipt times, Z-reading day boundary, and BIR compliance if §2.3 = B | 2026-11-24 | **open — and already wrong in the running code: timestamps come back in UTC (§5.1). Deliberately not fixed; see §13.** |
+| 9 | Confirm the layer-first package structure (§6.1.1) | every file path in the backend | 2026-11-24 | **open — but the code already follows option A.** Cheap to reverse while the backend is six classes; expensive once domain code exists. |
 
 ---
 
@@ -837,6 +1028,12 @@ trivia the next session cannot reuse.
 | 2026-11-24 | `gainsoclock` is the reference for code structure and conventions | Owner's instruction. Consistency across the two personal Spring Boot projects lowers the cost of moving between them. The conventions are adopted in §6.1.2; the **layout** conflicts with the modular-monolith decision and is raised as a blocker in §6.1.1 rather than silently resolved. | Owner, conflict flagged by Claude |
 | 2026-11-24 | Infrastructure addresses and usernames are kept out of the repository, not just passwords | The repository was confirmed public. A private LAN address plus an account name is reconnaissance material, and git history is permanent. The handover file holds them instead. | Claude |
 | 2026-11-24 | The database connection is verified working; SSH is not | Recorded so no later session assumes server access exists. Password-only SSH cannot be used by an agent session, which has no interactive terminal. | Claude |
+| 2026-11-24 | The hold on scaffolding was lifted for the skeleton only, and a Spring Boot project was generated and committed (`2b6dcd6`, §5.1) | The owner supplied the Initializr parameters directly — coordinates, dependencies, Java and Boot versions, configuration format — which is the owner lifting their own hold for this step. The hold's reasoning still applies to everything beyond the skeleton: the schema, auth, and checkout all depend on unanswered `[BLOCKER]` items, and none of them were touched. What was built is deliberately blocker-free: a build, a response envelope, and a health endpoint, none of which the §2 answers can invalidate. | Owner, scope limited by Claude |
+| 2026-11-24 | **The backend is packaged layer-first at the base package (§6.1.1 option A), which supersedes the earlier decision to package it as a modular monolith by feature.** The earlier decision is not deleted — it stands as the documented alternative in §6.1 and is what §6.1.1 option B would restore. **This supersession is pending the owner's explicit confirmation (§12 #9).** | The two instructions could not both be honoured: "structure it as a modular monolith" and "use gainsoclock as the structural reference" describe different file trees, and gainsoclock is layer-first. The gainsoclock instruction was the more recent and the more specific of the two, and a file had to be put somewhere, so it won. Recorded as superseding rather than as a compromise because pretending the code is a modular monolith when it is six classes in `controllers/`, `dtos/`, `types/` and `utilities/` would make this document lie — the one failure mode it cannot afford. The cost is explicit: there are no module boundaries, so §6.1.2's enforcement questions do not currently apply. The reversal is minutes of work today and hours after the first domain module, which is why confirmation is wanted before the next one is written. | Claude, on the owner's structural instruction — **confirmation outstanding** |
+| 2026-11-24 | The `ResponseDto` envelope is kept in full, `className`/`methodName` included (§6.1.2) | Consistency with gainsoclock was the point of naming it as the reference, and the envelope is the most visible part of that consistency. The leak caveat is not withdrawn: both fields are populated on every response, including errors, and must be suppressed in production error responses before the API is publicly reachable. | Claude, per §6.1.2 |
+| 2026-11-24 | The Spring Boot parent is `4.2.0`, not Initializr's `4.2.0.RELEASE` | The `.RELEASE` coordinate Initializr's metadata names does not exist in Maven Central — the suffix was dropped years ago — so the generated pom could not resolve its parent at all. Recorded in §5.1 because regenerating will reproduce it. | Claude |
+| 2026-11-24 | The owner's "packaging: yaml" was implemented as YAML configuration with `jar` packaging | Maven packaging admits only `jar` or `war`, so the note cannot have meant Maven packaging. YAML configuration matches gainsoclock, which is the stated reference. Flagged in §5.1 as an assumption awaiting the owner's word, not as a settled decision. | Claude, interpretation — **unconfirmed** |
+| 2026-11-24 | The UTC `responseTime` defect is recorded, not fixed | §10 asks the owner for the project's timezone and has no answer yet. Setting `spring.jackson.time-zone` would be inventing that answer in code, where it is far less visible than an unanswered row in this document — and a timestamp that is quietly eight hours off is worse than one that is loudly unconfigured. The defect is written into §5.1, §10 and §12 #8 instead, and the fix is a one-line property the moment the row is filled. | Claude, per §12 #8 |
 
 ---
 
@@ -848,3 +1045,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.2 | Added §7.1 branches: remote URL, `main` is README-only, all work commits directly to `dev/api/resibo`. Push policy still open. | Claude |
 | 2026-11-24 | 0.3 | Push policy decided (push every commit) and commit-message convention recorded in §7.1. `CLAUDE.md` added to the repository pointing future sessions here. Vault notes created. | Claude |
 | 2026-11-24 | 0.4 | Branch renamed to `dev/api/resibo`. Added §6.1.1 (gainsoclock reference and the layout conflict, as a blocker) and §6.1.2 (adopted conventions). Added §7.2 verified infrastructure: DB connection working, SSH not, repository confirmed public. Rewrote §8 with the handover file location and added §8.1 outstanding security risks. Added `.gitignore`. | Claude |
+| 2026-11-24 | 0.5 | Reconciled the document with the committed scaffold (`2b6dcd6`). **§6.1 rewritten**: it described a `modules/` tree that does not exist, and now states that the code is layer-first (§6.1.1 option A) with the modular monolith kept as the documented alternative; §6.1.1 stays open as a confirmation item. Added §5.1 recording the scaffold, its dependencies, the `4.2.0.RELEASE` / "packaging: yaml" traps, the local toolchain, and the verified build and endpoints. §5's decision column filled in where code decided it and marked open where nothing has (no JPA, no driver, no Flyway, no auth, no frontend). §6.1.2 answers the `ResponseDto` and Boot/Java questions and lists which conventions actually exist. §10 and §12 #8 record the UTC `responseTime` defect; §12 #9 records the structure confirmation; §11 marks phase 1 partially delivered. Six decisions appended to §13, including the structural supersession. | Claude |

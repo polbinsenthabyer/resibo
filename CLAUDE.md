@@ -63,17 +63,33 @@ brief and precise; Conventional Commits, imperative mood.
 
 ## Architecture
 
-The backend is a **modular monolith**: one deployable Spring Boot application,
-packaged by feature rather than by layer. There is no top-level `controllers/`,
-`services/`, or `repositories/`.
+The backend lives at the **repository root** — `pom.xml` and `src/`, not under
+`backend/` — and is packaged **layer-first** at the base package
+`com.api.resibo`: `controllers/`, `dtos/`, `types/`, `utilities/`, mirroring the
+sibling project gainsoclock. `entities/`, `repositories/` and `services/` join
+them, flat, when a feature needs them. There is no `modules/` package and no
+`shared/` package.
 
-Each module keeps its entities and repositories package-private and exposes only
-an `api/` package of interfaces and DTOs. **Modules never read each other's
-tables** — cross-module access goes through the owning module's interface. Every
-table has exactly one owning module, and Flyway migrations are named by owner.
-That rule is the whole point of the structure; without it this becomes a tangle
-with extra folders. The layout and the open questions about enforcing it are in
-plan §6.1.
+That is plan §6.1.1 **option A**, and it **supersedes** the earlier
+modular-monolith decision. Anything describing feature modules with enforced
+boundaries — an older copy of this file, or the plan before document version
+0.5 — is describing what was intended, not what exists. Nothing enforces module
+boundaries, because there are no modules.
+
+**The owner has not confirmed it** (plan §12 #9). Do not quietly entrench it: if
+you are about to write the first domain feature, that is the moment to ask.
+Reversing six classes takes minutes; reversing a built-out backend does not.
+
+Conventions that do hold, and that new code must follow (plan §6.1.2):
+
+- Every controller and service returns `ResponseDto`, built through
+  `ResponseUtility.getSuccessResponse(message[, data])` or
+  `getErrorResponse(code, message)` — never assembled by hand.
+- Enums live in `types/`, suffixed `*Type`. Stateless helpers live in
+  `utilities/`.
+- Response messages are constants in `MessageType`, not strings at call sites.
+- Services are an interface plus an `XxxServiceImpl`, never a bare class.
+- Lombok `@Data` / `@NoArgsConstructor` / `@AllArgsConstructor` on DTOs.
 
 ## Secrets
 
@@ -88,7 +104,30 @@ committed `.env.example` lists the names with empty values.
 
 ## Current state
 
-No application code exists. There is no build, no test suite, and nothing to
-run; commands will be documented here once a skeleton exists. Scaffolding is
-blocked on the plan's blocking questions, by the owner's explicit instruction —
-do not generate a Spring Boot or React project until those are answered.
+A skeleton exists and is verified: Spring Boot 4.2.0 on Java 17, Maven,
+the `ResponseDto` conventions, `GET /api/health/check`, `/actuator/health`, and
+two passing tests. There is **no database connection** — the pom has neither JPA
+nor a JDBC driver — and no schema, no migrations, no authentication, and no
+frontend. Plan §5.1 records exactly what was generated and what was verified.
+
+**No JDK is on `PATH` and `JAVA_HOME` is unset. Maven is not installed.** Set
+`JAVA_HOME` in every shell before building, and use the committed wrapper:
+
+```powershell
+$env:JAVA_HOME = "$env:USERPROFILE\.jdks\ms-17.0.20"   # Microsoft OpenJDK 17.0.20
+.\mvnw.cmd -B clean verify     # compile + tests
+.\mvnw.cmd spring-boot:run     # run on :8080, override with SERVER_PORT
+```
+
+Everything past the skeleton is still blocked. Generating it was the owner
+lifting the scaffolding hold for one step, not for the project — do not start on
+the schema, auth, or checkout without answers to §1, §2 and §6.1.1.
+
+Two known gaps, so they are not rediscovered as surprises:
+
+- `responseTime` serialises in **UTC**, not local time. **Deliberately not
+  fixed** — the project's timezone is an open owner question (plan §10, §12 #8).
+  Do not "fix" it by guessing a zone; answer the question first.
+- `className` and `methodName` are returned on every response, errors included.
+  They leak internals and must be suppressed in production error responses
+  (plan §6.1.2).
