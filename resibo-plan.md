@@ -5,7 +5,7 @@
 > disagree, one of them is a bug: either the code drifted, or this file went
 > stale and must be corrected in the same change that revealed it.
 
-**Status: planning, with a deployed API and one-page React client.** A Spring Boot application runs on the server in Docker behind the
+**Status: planning, with a deployed API and React client with health and auth pages.** A Spring Boot application runs on the server in Docker behind the
 host's nginx, fronted by the Cloudflare tunnel that already serves the sibling
 projects, answering on `https://resibo-api.polbinsenthabyer.uk` (§7.3). It
 connects to MariaDB as a dedicated least-privilege account, with Hibernate
@@ -1199,7 +1199,9 @@ therefore work, but it must be intentional.
 | `npx prettier --check` | clean |
 | `./mvnw -B clean compile` after the client landed | **BUILD SUCCESS**, 32 sources, `src/main/client` untouched |
 | The deployed API | Previously verified by `curl`: `GET /api/health/check` returns 200 and the local Vite origin is allowed by CORS. This is the production build target, not the local development default. |
-| Login and signup in a browser | **Not yet verified.** Build, types, and lint pass; a real account has not been created to exercise signup. CI and public route checks are still pending this change. |
+| Auth page deployment (`6187e06`) | [Client run 45369269628](https://github.com/polbinsenthabyer/resibo/actions/runs/45369269628) passed Build and Deploy. Public `/login` and `/signup` returned `200 text/html` and loaded the new JS bundle. Live JS and CSS SHA-256 hashes matched the local production build; the CSS contains two narrow-screen media blocks. API health stayed 200. |
+| Safe auth-controller rejection checks | A bogus login returned `ERROR/E0106`; a signup request with a blank username returned `ERROR/E0101`. No account was created. These verify the live endpoints and error envelope, not the rendered forms. |
+| Login and signup in a browser | **Not visually verified or submitted through a browser.** The page bundle and responsive CSS were verified by HTTP and hash comparison; no real account was created to exercise signup success. |
 
 ---
 
@@ -2320,3 +2322,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.16 | Recorded successful end-to-end client CI deployment (`e1f80e4`, run `45366787290`), public GIF hash match, preservation of old assets, and no backend workflow run. Closed §12 #22 for the client. | Codex |
 | 2026-11-24 | 0.17 | Recorded a second successful client-only push (`99446c1`, run `45367329760`) to verify the `client/**` trigger and repeat deployment. | Codex |
 | 2026-11-24 | 0.18 | Added responsive login and signup pages to §5.6, recorded the development API default change and its shared-database caveat, and superseded the earlier read-only client status. Verification and CI deployment of the new forms remain pending. | Codex |
+| 2026-11-24 | 0.19 | Recorded client CI Build and Deploy success for `6187e06`, live auth route and bundle hash checks, narrow-screen CSS presence, safe API error responses, and the unverified browser submission limit. | Codex |
