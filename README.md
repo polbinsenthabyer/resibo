@@ -65,12 +65,15 @@ This repository keeps its branches deliberately separate:
 | Branch | Contents |
 |---|---|
 | `main` | This README, and nothing else. |
-| `dev/resibo` | The working branch — `resibo-plan.md` and, in time, the application. |
+| `dev/api/resibo` | Backend working branch — `resibo-plan.md` and, in time, the application. |
+
+The `api` segment distinguishes backend work from frontend work; a frontend
+branch would be `dev/app/resibo`.
 
 **The plan is not on `main`.** To read it:
 
 ```sh
-git switch dev/resibo
+git switch dev/api/resibo
 ```
 
 Application code arrives once the plan's blocking questions are answered.
