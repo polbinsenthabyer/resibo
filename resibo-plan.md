@@ -52,7 +52,7 @@
 
 | Field | Value |
 |---|---|
-| Document version | 0.2 — template, not yet filled in |
+| Document version | 0.3 — template, not yet filled in |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-24 |
 | Last updated by | Claude (initial template) |
@@ -519,9 +519,15 @@ Consequences, so no session is surprised by them:
 So the standing instruction for every session is: **work on `dev/resibo`.** Touch
 `main` only to update the README, and then only the README.
 
-| Question | My recommendation | Your decision |
-|---|---|---|
-| Push policy — push every commit, or commit locally and push on request? | Push every commit on `dev/resibo`. It is the only off-machine backup this project has, and the plan is the project's most valuable artifact right now. | |
+**Push policy (decided by owner, 2026-11-24):** push to the remote. Sessions do
+not need to ask first.
+
+**Commit messages (owner's instruction, 2026-11-24):** meaningful, brief, and
+precise. Conventional Commits, imperative mood — `feat:`, `fix:`, `docs:`,
+`chore:`, `refactor:`. A one-line subject is the norm; add a body only when the
+change genuinely needs explaining, and keep it short when you do.
+
+Never force-push. A rejected push is reported, not overridden.
 
 ---
 
@@ -675,6 +681,7 @@ trivia the next session cannot reuse.
 | 2026-11-24 | Credentials are referenced by name in the plan; values live outside the repo and outside the vault | Secrets in documentation leak through git history, backups, and notes. Names are enough to describe the system. | Claude, per standing rule |
 | 2026-11-24 | Remote is `github.com/polbinsenthabyer/resibo` | Owner-supplied | Owner |
 | 2026-11-24 | `main` holds `README.md` only; everything else lives on `dev/resibo`, committed to directly | Owner's choice. Keeps the public face of the repository to a single curated document while development history stays on one working branch. | Owner |
+| 2026-11-24 | Push every commit to the remote; commit messages brief and precise | Owner's instruction. The remote is the project's only off-machine backup, which matters most while the plan is the most valuable thing in the repository. | Owner |
 
 ---
 
@@ -684,3 +691,4 @@ trivia the next session cannot reuse.
 |---|---|---|---|
 | 2026-11-24 | 0.1 | Initial template. Stack and modular-monolith structure recorded as decided; all scope, architecture, and deployment questions open. | Claude |
 | 2026-11-24 | 0.2 | Added §7.1 branches: remote URL, `main` is README-only, all work commits directly to `dev/resibo`. Push policy still open. | Claude |
+| 2026-11-24 | 0.3 | Push policy decided (push every commit) and commit-message convention recorded in §7.1. `CLAUDE.md` added to the repository pointing future sessions here. Vault notes created. | Claude |
