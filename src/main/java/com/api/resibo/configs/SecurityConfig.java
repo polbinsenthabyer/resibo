@@ -4,6 +4,7 @@ import com.api.resibo.configs.jwt.JwtAccessDeniedHandler;
 import com.api.resibo.configs.jwt.JwtAuthenticationEntryPoint;
 import com.api.resibo.configs.jwt.JwtFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -18,6 +19,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -34,21 +36,37 @@ public class SecurityConfig {
     }
 
     /**
-     * CORS open to all origins for now, as requested, so frontend work is not
-     * blocked. Replace "*" with the real frontend origins before this holds
-     * live data.
+     * Which origins may call this API from a browser.
      *
-     * allowCredentials stays false: browsers reject credentials from a "*"
-     * origin, and we do not need them — the token is sent in the Authorization
-     * header, not a cookie.
+     * Comma-separated, from CORS_ALLOWED_ORIGINS. Defaults to "*" so nothing
+     * is blocked while the frontend is being built. The React dev server runs
+     * on http://localhost:5173 and is covered either way.
+     *
+     * To lock it down, set the env var to the real origins, for example:
+     *   CORS_ALLOWED_ORIGINS=http://localhost:5173,https://resibo.example.com
      */
+    @Value("${cors.allowed-origins}")
+    private String allowedOrigins;
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+
+        // Browsers reject credentialed requests from a "*" origin, so only
+        // allow credentials once real origins are named. Resibo does not need
+        // them today — the token goes in the Authorization header, not a
+        // cookie — but this means switching to named origins does not quietly
+        // leave cookies broken later.
+        boolean wildcard = origins.contains("*");
+
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("*"));
+        config.setAllowedOriginPatterns(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
         config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(false);
+        config.setAllowCredentials(!wildcard);
         // Lets a browser read the header back on a cross-origin response.
         config.setExposedHeaders(List.of("Authorization"));
         config.setMaxAge(3600L);
