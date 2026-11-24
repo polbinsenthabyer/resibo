@@ -1,4 +1,4 @@
-package com.api.resibo.controllers;
+package com.api.resibo.controllers.admin;
 
 import com.api.resibo.dtos.ProductDto;
 import com.api.resibo.dtos.ProductListDto;
@@ -14,19 +14,19 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Products CRUD.
+ * Products CRUD, administrator side.
  *
  * <p>Create and update are one operation — {@code /set} — distinguished by
  * whether the payload carries an id.
  *
- * <p>⚠️ No authentication or authorisation yet. Every endpoint here is open to
- * anyone who can reach the API, which is currently the public internet. See
- * §1.3 of resibo-plan.md; this must be closed before real catalogue data goes in.
+ * <p>Mounted under {@code /api/admin/**}, which {@code SecurityConfig}
+ * restricts to the ADMIN role. An EMPLOYEE token reaching these endpoints
+ * gets 403, an absent or invalid token gets 401 — neither reaches this class.
  */
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("api/products")
-public class ProductController {
+@RequestMapping("api/admin/products")
+public class AdminProductController {
 
     private final ProductService productService;
 

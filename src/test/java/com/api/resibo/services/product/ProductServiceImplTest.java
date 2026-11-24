@@ -6,6 +6,7 @@ import com.api.resibo.dtos.ProductListDto;
 import com.api.resibo.dtos.ResponseDto;
 import com.api.resibo.entities.Product;
 import com.api.resibo.repositories.ProductRepository;
+import com.api.resibo.utilities.SecurityUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -39,6 +40,9 @@ class ProductServiceImplTest {
 
     @Mock
     private ProductRepository productRepository;
+
+    @Mock
+    private SecurityUtil securityUtil;
 
     @InjectMocks
     private ProductServiceImpl service;
@@ -154,6 +158,7 @@ class ProductServiceImplTest {
 
     @Test
     void setWithoutIdCreatesAndAppliesColumnDefaults() {
+        when(securityUtil.currentUsername()).thenReturn("manual");
         ProductDto dto = new ProductDto();
         dto.setProductName("  Barako Coffee  ");          // trimmed by the service
         when(productRepository.save(any(Product.class))).thenAnswer(i -> i.getArgument(0));
@@ -261,7 +266,13 @@ class ProductServiceImplTest {
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
         verify(productRepository).search(any(), any(), any(), any(), any(), pageable.capture());
-        Sort.Order order = pageable.getValue().getSort().getOrderFor("productPrice");
+
+        // The API field name is productPrice, but the Sort must carry the
+        // COLUMN name: the listing is a native query, so Spring Data appends
+        // this string straight into ORDER BY. "productPrice" would be invalid
+        // SQL. Asserting the translated name is the point of this test.
+        assertThat(pageable.getValue().getSort().getOrderFor("productPrice")).isNull();
+        Sort.Order order = pageable.getValue().getSort().getOrderFor("product_price");
         assertThat(order).isNotNull();
         assertThat(order.getDirection()).isEqualTo(Sort.Direction.DESC);
     }

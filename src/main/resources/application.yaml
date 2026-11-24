@@ -40,6 +40,14 @@ spring:
 server:
   port: ${SERVER_PORT:8080}
 
+# No default for the secret, deliberately: a hardcoded fallback would mean
+# every environment that forgot to set one shares a signing key an attacker
+# can read in the repository. Startup fails instead.
+jwt:
+  secret: ${JWT_SECRET}
+  # Milliseconds. 28800000 = 8 hours, roughly one shift on a till.
+  expiration: ${JWT_EXPIRATION:28800000}
+
 # Actuator exposes /actuator/health for infrastructure probes.
 # The application's own contract endpoint is /api/health/check (HealthController),
 # which returns the standard ResponseDto envelope.

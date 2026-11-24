@@ -14,6 +14,21 @@ public class MessageType {
     public static final String ERROR_SOMETHING_WENT_WRONG = "ERROR SOMETHING WENT WRONG";
     public static final String SUCCESSFULLY_FETCHED_DATA = "SUCCESSFULLY FETCHED DATA";
 
+    // --- security -------------------------------------------------------
+    public static final String ERROR_UNAUTHENTICATED = "ERROR AUTHENTICATION REQUIRED";
+    public static final String ERROR_NO_PERMISSION = "ERROR YOU DO NOT HAVE PERMISSION";
+
+    // --- auth -----------------------------------------------------------
+    public static final String ERROR_USERNAME_REQUIRED = "ERROR USERNAME IS REQUIRED";
+    public static final String ERROR_USERNAME_TOO_LONG = "ERROR USERNAME EXCEEDS 100 CHARACTERS";
+    public static final String ERROR_PASSWORD_TOO_SHORT = "ERROR PASSWORD MUST BE AT LEAST 8 CHARACTERS";
+    public static final String ERROR_USERNAME_ALREADY_EXISTS = "ERROR USERNAME ALREADY EXISTS";
+    public static final String ERROR_INVALID_ROLE = "ERROR INVALID ROLE";
+    /** Deliberately identical for unknown user, wrong password and disabled account. */
+    public static final String ERROR_INVALID_CREDENTIALS = "ERROR INVALID CREDENTIALS";
+    public static final String SUCCESSFULLY_SIGNED_UP = "SUCCESSFULLY SIGNED UP";
+    public static final String SUCCESSFULLY_LOGGED_IN = "SUCCESSFULLY LOGGED IN";
+
     // --- product --------------------------------------------------------
     public static final String ERROR_PRODUCT_NAME_REQUIRED = "ERROR PRODUCT NAME IS REQUIRED";
     public static final String ERROR_PRODUCT_NAME_TOO_LONG = "ERROR PRODUCT NAME EXCEEDS 100 CHARACTERS";

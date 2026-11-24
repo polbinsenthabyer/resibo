@@ -8,6 +8,7 @@ import com.api.resibo.entities.Product;
 import com.api.resibo.repositories.ProductRepository;
 import com.api.resibo.utilities.MessageType;
 import com.api.resibo.utilities.ResponseUtility;
+import com.api.resibo.utilities.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -19,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Date;
-import java.util.Set;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -27,23 +28,29 @@ import java.util.Set;
 public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
+    private final SecurityUtil securityUtil;
 
     /**
-     * Audit actor until authentication exists. Matches the column default in
-     * sql/tables/product.sql. Replace with the authenticated
-     * principal once §1.3 of resibo-plan.md is answered and auth is built —
-     * audit columns that always say "manual" record nothing useful.
+     * Sortable fields, mapped from the API's field name to the database
+     * column.
+     *
+     * <p>The mapping is required, not cosmetic: the listing runs as a
+     * <b>native</b> query, so Spring Data appends the {@code ORDER BY} using
+     * whatever string the {@code Sort} carries. Passing {@code productName}
+     * straight through would produce {@code ORDER BY productName} and fail —
+     * the column is {@code product_name}.
+     *
+     * <p>It doubles as the allow-list. An unrecognised value falls back to
+     * {@code id} rather than throwing, so a typo cannot turn into a 500, and
+     * nothing a caller sends ever reaches the SQL verbatim.
      */
-    private static final String AUDIT_ACTOR = "manual";
-
-    /**
-     * Sorting is restricted to real, indexed-or-cheap columns. An unknown
-     * value falls back to id instead of throwing: callers should not be able
-     * to turn a typo into a 500, and an open sort property lets a caller
-     * order by anything the entity exposes.
-     */
-    private static final Set<String> SORTABLE =
-            Set.of("id", "productName", "productPrice", "productRemainingStocks", "createdAt", "updatedAt");
+    private static final Map<String, String> SORT_COLUMNS = Map.of(
+            "id", "id",
+            "productName", "product_name",
+            "productPrice", "product_price",
+            "productRemainingStocks", "product_remaining_stocks",
+            "createdAt", "created_at",
+            "updatedAt", "updated_at");
 
     private static final int MAX_PAGE_SIZE = 200;
 
@@ -88,10 +95,13 @@ public class ProductServiceImpl implements ProductService {
         try {
             Product product;
             Date now = new Date();
+            // Real username now that authentication exists; "manual" only if
+            // somehow unauthenticated, which SecurityConfig should prevent.
+            String actor = securityUtil.currentUsername();
 
             if (dto.getId() == null) {
                 product = new Product();
-                product.setCreatedBy(AUDIT_ACTOR);
+                product.setCreatedBy(actor);
                 product.setCreatedAt(now);
             } else {
                 product = productRepository.findById(dto.getId()).orElse(null);
@@ -108,7 +118,7 @@ public class ProductServiceImpl implements ProductService {
                     ? BigDecimal.ZERO : dto.getProductPrice());
             product.setProductRemainingStocks(dto.getProductRemainingStocks() == null
                     ? 0 : dto.getProductRemainingStocks());
-            product.setUpdatedBy(AUDIT_ACTOR);
+            product.setUpdatedBy(actor);
             product.setUpdatedAt(now);
 
             return ResponseUtility.getSuccessResponse(
@@ -140,8 +150,8 @@ public class ProductServiceImpl implements ProductService {
             int size = dto.getSize() == null || dto.getSize() < 1
                     ? 10 : Math.min(dto.getSize(), MAX_PAGE_SIZE);
 
-            String sortBy = dto.getSortBy() != null && SORTABLE.contains(dto.getSortBy())
-                    ? dto.getSortBy() : "id";
+            // Resolve to a column name; unknown values fall back to id.
+            String sortColumn = SORT_COLUMNS.getOrDefault(dto.getSortBy(), "id");
             Sort.Direction direction = "DESC".equalsIgnoreCase(dto.getSortDirection())
                     ? Sort.Direction.DESC : Sort.Direction.ASC;
 
@@ -155,7 +165,7 @@ public class ProductServiceImpl implements ProductService {
                     dto.getMinPrice(),
                     dto.getMaxPrice(),
                     Boolean.TRUE.equals(dto.getInStockOnly()) ? 1 : null,
-                    PageRequest.of(page, size, Sort.by(direction, sortBy)));
+                    PageRequest.of(page, size, Sort.by(direction, sortColumn)));
 
             return ResponseUtility.getSuccessResponse(
                     MessageType.SUCCESSFULLY_FETCHED_DATA, PageDto.of(result));
