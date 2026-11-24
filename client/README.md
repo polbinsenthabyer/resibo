@@ -43,6 +43,20 @@ The browser sees a single origin that way, so CORS never applies.
 | `npm run lint` | oxlint |
 | `npm run format` | Prettier, write |
 
+## Deployment
+
+A push to `dev/resibo` that changes `client/**` starts the client workflow.
+It runs lint and build on GitHub-hosted Ubuntu, then sends the build artifact
+to the `resibo-client-deploy` runner, which serves it from
+`/var/www/resibo/live`. The repository variable `CLIENT_DEPLOY_ENABLED=true`
+controls this deploy job. The backend workflow has its own path filter and
+deploy gate, so a client-only commit does not redeploy the API. The first
+automatic client release passed in [run 45366787290](https://github.com/polbinsenthabyer/resibo/actions/runs/45366787290).
+
+The health page currently displays a temporary SpongeBob GIF to make the
+pipeline result easy to see. It is bundled in `public/spongebob.gif`, sourced
+from the [SpongeBob SquarePants GIPHY channel](https://giphy.com/gifs/dancing-hipster-spongebob-9d1Fo0XyIYXzW).
+
 ## Why it is separate from the backend
 
 The backend is a Maven project under `server/`. The Docker build context is
