@@ -3,7 +3,7 @@
 The React frontend. Lives at `src/main/client` inside the backend repository,
 on branch `dev/app/resibo`.
 
-> The project's source of truth is [`resibo-plan.md`](../../../resibo-plan.md) at
+> The project's source of truth is [`resibo-plan.md`](../resibo-plan.md) at
 > the repository root. Read it before making decisions here — product scope,
 > the domain model and the open `[BLOCKER]` questions all live there, and
 > several of them decide what this app looks like.

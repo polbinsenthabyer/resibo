@@ -67,15 +67,15 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.10 — frontend client recorded; scope still unfilled |
+| Document version | 0.11 — one repository, client/ and server/, both deployed; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-24 |
-| Last updated by | Claude (the client now defaults to the deployed API rather than a local backend) |
-| Plan status | **AWAITING OWNER INPUT** — the API is deployed, publicly reachable (§7.3), authenticated (§5.4) and serves an admin-only product catalog, and a React client is scaffolded (§5.6). There is still no checkout, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
-| Working copy | Two checkouts of the same repository, one per branch — `%USERPROFILE%\sprintify_solutions\personal\resibo` on `dev/api/resibo`, and `%USERPROFILE%\sprintify_solutions\personal\app\resibo` on `dev/app/resibo`. Mirrors gainsoclock’s layout. |
+| Last updated by | Claude (split the repository into client/ and server/, and deployed the client) |
+| Plan status | **AWAITING OWNER INPUT** — the API is deployed and authenticated (§5.4, §7.3), and the React client is now deployed too, at `https://resibo.polbinsenthabyer.uk` (§5.6, §7.4). There is still no checkout, no sale and no receipt, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
+| Working copy | `%USERPROFILE%\sprintify_solutions\personal\app\resibo` on `dev/resibo` — one branch, one tree. ⚠️ `%USERPROFILE%\sprintify_solutions\personal\resibo` is a **stale second clone** still on the retired `dev/api/resibo`; delete it or re-point it, or two sessions will edit two trees. |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
 | Production URL | `https://resibo-api.polbinsenthabyer.uk` — health, auth, and admin-only products; see §7.3 |
-| This document lives on | branch `dev/api/resibo`, and on `dev/app/resibo` which was cut from it — see §7.1. **An edit made on the frontend branch has to reach `dev/api/resibo` as well, or the two copies drift — see §12 #23.** |
+| This document lives on | branch `dev/resibo`, the single working branch — see §7.1. The two-branch split that made this document exist twice is retired. |
 | Vault notes | `Obsidian Vault/Projects/personal/resibo/` |
 
 ---
@@ -392,7 +392,7 @@ a choice has been made in code, and says **open** where nothing has been chosen.
 | Backend tests | JUnit 5 + Testcontainers against real MariaDB | **JUnit 5 in use** (`spring-boot-starter-webmvc-test`, `spring-boot-starter-actuator-test`, `spring-boot-starter-data-jpa-test`, `spring-boot-starter-security-test`), **22 tests** as of 2026-11-24. **Testcontainers still open — and it stopped being academic**: the context test now needs a datasource, CI supplies a throwaway one (§5.3), but a local `mvnw verify` loads `.env.dev` and therefore connects to the **shared production database**, which now has real rows in it. §12 #13. |
 | Frontend tests | Vitest + React Testing Library; Playwright for checkout | **Open** — no test runner is installed in the client. |
 | Local database | Docker Compose for MariaDB | **Decided by default, and not well.** `.env.dev` points local runs *and local tests* at the shared MariaDB on the server, because that is the database that exists. A local container or Testcontainers would isolate it; neither is in place. **That schema is no longer empty**, so this has stopped being harmless. §12 #13. |
-| Repo layout | One repo: `backend/` and `frontend/` | **Diverged, and now settled.** The backend is at the **repository root** — `pom.xml` and `src/` are top-level, there is no `backend/`. The frontend is at **`src/main/client`**, on its own branch `dev/app/resibo`. Decided by the owner, 2026-11-24, after the alternatives were laid out; see §5.6 and §13. |
+| Repo layout | One repo: `backend/` and `frontend/` | **Adopted, with different names.** One repository, one branch `dev/resibo`, `client/` and `server/` at the root — the owner's call on 2026-11-24, replacing both the root-level backend and the two-branch split. Independent deploys come from CI path filters and disjoint deploy targets, not from the layout (§7.4). |
 
 **Accept all recommendations, or state your changes:**
 
@@ -1072,8 +1072,8 @@ screen.**
 
 | Field | Value |
 |---|---|
-| Location | `src/main/client` — inside the Maven source root, invisible to the Maven build |
-| Branch | `dev/app/resibo`, cut from `dev/api/resibo` at `e125c6e` |
+| Location | `client/` at the repository root, beside `server/` |
+| Branch | `dev/resibo` — the single working branch for both halves |
 | Scaffolded with | `npm create vite@latest` — create-vite 9.3.4, template `react-ts` |
 | Vite / React | Vite **8.3.8** · React **19.3.1** |
 | Language | TypeScript **7.0.2** with `strict`, plus `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` and `noImplicitOverride` |
@@ -1487,8 +1487,15 @@ behind it** — it serves health, auth, and an admin-only product catalog (§5.4
 | Branch | Holds |
 |---|---|
 | `main` | `README.md` only — the public face of the repository |
-| `dev/api/resibo` | backend development branch; carries `README.md`, `CLAUDE.md` **and** this plan |
-| `dev/app/resibo` | frontend development branch, created 2026-11-24 from `dev/api/resibo` at `e125c6e`. Carries the whole backend **plus** the React client at `src/main/client` (§5.6). |
+| **`dev/resibo`** | **everything**: `client/`, `server/`, `scripts/`, `docker-compose.yml`, `CLAUDE.md` and this plan. The single working branch. |
+
+**Superseded 2026-11-24:** `dev/api/resibo` and `dev/app/resibo` are
+retired. The `api`/`app` split was created so backend and frontend work
+could proceed independently, and it did not deliver that — independence
+comes from the CI path filters and the disjoint deploy targets described in
+§7.4, which work equally well on one branch. What the split did deliver was
+drift: two copies of this document, both calling themselves version 0.8,
+inside a single day. See §13 and §12 #23.
 
 Remote: `https://github.com/polbinsenthabyer/resibo.git` — **public** (see §7.2).
 
@@ -1516,9 +1523,20 @@ Consequences, so no session is surprised by them:
   does not receive application code. The only commits `main` ever gets are README
   updates.
 
-**Amended 2026-11-24, when the frontend branch was created.** The standing
-instruction is now: **backend work on `dev/api/resibo`, frontend work on
-`dev/app/resibo`.** `main` still receives only README changes.
+**Amended again 2026-11-24, when the repository became a monorepo.** The
+standing instruction is now the simplest it has been: **all work commits
+directly to `dev/resibo`.** `main` still receives only README changes.
+
+A commit may touch `client/`, `server/`, or both. Touching both is normal
+and correct for a change that spans the contract — an endpoint and its
+caller — and it is the thing the two-branch layout made impossible.
+Which pipeline runs is decided by the path filters in §7.4, not by where
+the commit sits.
+
+On disk there is one checkout, `personal/app/resibo`. ⚠️ A second clone at
+`personal/resibo` still exists on the retired `dev/api/resibo` and should
+be deleted or re-pointed — two trees for one branch is how the last
+divergence started.
 
 Because `dev/app/resibo` was cut *from* `dev/api/resibo` rather than from
 `main`, it carries a complete copy of the backend, this plan and `CLAUDE.md`.
@@ -1765,6 +1783,116 @@ Already verified on 2026-11-24, not inferred:
 the public internet, which §6.1.2 said had to stop *before* public exposure
 (§12 #10). Neither is cosmetic; both are recorded rather than quietly patched,
 for the reasons in §13.
+
+### 7.4 Deploying the client, and why it cannot redeploy the API (2026-11-24)
+
+The React client is **live** at **`https://resibo.polbinsenthabyer.uk`**, and
+it is deployed by a path that shares nothing with the API's.
+
+| | Backend | Frontend |
+|---|---|---|
+| Artifact | Docker image `resibo-api:current` | static files from `client/dist` |
+| Lives at | container on `127.0.0.1:8083` | `/var/www/resibo/live` |
+| Deployed by | `scripts/deploy.sh` | `scripts/deploy-client.sh` |
+| nginx vhost | `resibo` → `proxy_pass` | `resibo-web` → `root` + `try_files` |
+| Hostname | `resibo-api.polbinsenthabyer.uk` | `resibo.polbinsenthabyer.uk` |
+| On deploy | the container restarts, health-gated | **nothing restarts** |
+| Rollback | retag `:previous` → `:current` | rsync back `/var/www/resibo/.previous/live` |
+
+**This is the separation the owner asked for, and it holds at three levels.**
+
+1. **Different things on disk.** A client deploy writes files into
+   `/var/www/resibo/live`. It never names the container, the image or port
+   8083. nginx serves whatever is on disk at the next request — no reload, no
+   restart, no dropped connection. A frontend release cannot restart the API
+   any more than copying a file could.
+2. **Different vhosts.** `resibo` and `resibo-web` are separate files in
+   `/etc/nginx/sites-available`. Editing one does not touch the other.
+3. **Different workflows, by path filter.** `.github/workflows/client-ci.yml`
+   triggers on `client/**`, `server-ci.yml` on `server/**`. A commit touching
+   only `client/` does not *start* the server workflow — the run is never
+   queued, so the image is not rebuilt. Shared root files are assigned
+   deliberately: `docker-compose.yml` and `scripts/deploy.sh` to the server,
+   `scripts/deploy-client.sh` to the client. **A build input listed in
+   neither workflow will never trigger a deploy** — right for docs, a silent
+   problem for anything else.
+
+#### The one-time setup
+
+```sh
+cd /opt/resibo/app && sudo -E bash scripts/setup-client-server.sh live
+```
+
+Creates `/var/www/resibo/live` (owned by the deploying account, parent left
+root-owned so a compromised deploy cannot rewrite a sibling) and
+`/var/www/resibo/.previous` for rollbacks, writes
+`/etc/nginx/sites-available/resibo-web`, symlinks it, runs `nginx -t`, reloads
+and then checks the neighbouring hostnames still answer.
+
+**The vhost is written by that script and is deliberately not a committed
+file.** Every other vhost on this host exists only in
+`/etc/nginx/sites-available`; a copy in the repository would be a second
+source of truth that drifts. The script is the reproducible artifact.
+
+#### Deploying
+
+CI builds and the server only receives files — **the server has no Node
+installed and never builds the frontend**, the same division gainsoclock uses.
+By hand:
+
+```sh
+# locally
+cd client && npm ci && npm run build
+scp -r client/dist/. <server>:~/resibo-client-dist/
+# on the server
+cd /opt/resibo/app && bash scripts/deploy-client.sh ~/resibo-client-dist live
+```
+
+`deploy-client.sh` keeps the current release, rsyncs the new assets, and
+**installs `index.html` last**. Vite fingerprints every asset with a content
+hash, so new assets sit harmlessly beside the old ones; the moment
+`index.html` flips, it points at the new set. Copying it first would leave a
+window where the page asks for assets that are not there yet.
+
+#### Cloudflare
+
+`resibo.polbinsenthabyer.uk` was added to the **existing `personal-projects`
+tunnel** — the seventh service on it — and a proxied
+`CNAME resibo → <tunnel-id>.cfargotunnel.com` created in the zone.
+
+> 🚨 **The tunnel configuration endpoint takes a whole-config `PUT`.** There is
+> no call that appends a rule. The procedure followed, and the one to follow
+> again: read the current config, **back it up**, insert the new rule
+> **before** the `http_status:404` catch-all, `PUT` the complete list, then
+> read it back and check the neighbours. A `PUT` carrying only the new rule
+> silently drops the other six services — no error, just four other projects
+> offline.
+
+#### Verified, 2026-11-24
+
+| What | Result |
+|---|---|
+| `https://resibo.polbinsenthabyer.uk/` | **200**, serving the real build — the hashed `/assets/index-*.js` and `.css`, not the placeholder |
+| SPA deep link `/some/client/route` | **200** — `try_files` returns `index.html` rather than nginx's 404 |
+| CORS from the deployed client origin | preflight **200** with `access-control-allow-origin: https://resibo.polbinsenthabyer.uk`, and a real `GET` returns the `ResponseDto` envelope |
+| Tunnel ingress after the write | **8 rules**, all six neighbours intact, new rule before the catch-all |
+| Neighbours, publicly | `resibo-api` 200, `gainsoclock-app` 200, `gainsoclock-api` and `eloms-api` 401 — their normal unauthenticated answers |
+| Backend redeployed from the new layout | `scripts/deploy.sh` → image built from `server/`, health gate passed, container `Up (healthy)`, `/api/health/check` 200 |
+
+#### Not done
+
+- **No CI deploy.** Both workflows declare a `deploy` job on a self-hosted
+  runner labelled `resibo-deploy`, gated behind the `DEPLOY_ENABLED`
+  repository variable. **No runner carries that label.** The only runner on
+  the host is registered to the *gainsoclock* repository as
+  `gainsoclock-deploy`, so registering one for this repository is the single
+  remaining step before pushes deploy themselves. Until then both halves
+  deploy by the manual commands above. See §12 #22.
+- **No prelive for the client.** `setup-client-server.sh prelive` and
+  `deploy-client.sh … prelive` already work, but no hostname or tunnel rule
+  exists for it (§12 #11).
+
+---
 
 ## 8. Credentials and secrets
 
@@ -2077,8 +2205,8 @@ What phase 8 does **not** yet include, so nobody reads the row as finished:
 | 19 | **CORS is open to all origins** (§5.4) | nothing today; a browser-based attack surface the moment there is a frontend and real data | 2026-11-24 | open, deliberately. `allowedOriginPatterns` is `*` so frontend work is not blocked, with `allowCredentials=false` limiting what that can be abused for. Replace `*` with the real frontend origins before this API holds live data. Needs the frontend's hostname, which §5 has not decided. |
 | 20 | **`JWT_SECRET` is missing from `.env.example` and from the CI `build` job** (§5.1, §5.4) | a fresh checkout, and the CI test gate | 2026-11-24 | open, and it looks like an oversight rather than a decision. `jwt.secret` has no default and `ResiboApplicationTests` starts the full context, so a checkout that copies the committed template cannot start the application, and CI sets the datasource keys but no signing key. Both are one line each. Needs confirming against an actual CI run before anyone trusts the gate. |
 | 21 | **Is "every repository query is native SQL" a rule or a starting point?** (§5.5) | every repository written from here on | 2026-11-24 | open. It is the owner's instruction and is followed everywhere today. It has already cost one runtime bug (the `Integer` `EXISTS` trap), needs an explicit `countQuery` on every paginated query, and needs a field-to-column map for every sortable listing. Worth confirming it is wanted for simple lookups too, rather than only where JPQL fights the query. |
-| 22 | **How does the frontend get built and deployed?** The client exists (§5.6) and nothing ships it: no CI build step, no nginx vhost, no hostname, no container, and no decision on whether the SPA is served by nginx as static files or packaged into the Spring Boot jar's `static/` | the first time anyone other than a developer needs to see a screen | 2026-11-24 | open. Not urgent — there is one page and it says "the API answered". Worth deciding before a second page exists, because serving it from the jar would pull the client into the Maven build and change `src/main/client`'s relationship to it. |
-| 23 | **Two branches now carry a copy of this plan, and nothing keeps them in step.** `dev/app/resibo` was cut from `dev/api/resibo`, so `resibo-plan.md` and `CLAUDE.md` exist on both (§7.1) | the credibility of the declared source of truth | 2026-11-24 | **open, and it has already bitten once.** The frontend session branched at `4883414`, wrote up its work, and meanwhile `0135659` and `e125c6e` landed on `dev/api/resibo` with a full documentation pass — so §5.4, §5.5 and §12 #17–19 all appeared underneath it and the frontend branch had to be rebased and its section renumbered before committing. Options: carry documentation edits across by hand, keep the plan authoritative only on `dev/api/resibo` and accept the frontend copy going stale, or merge `dev/api/resibo` into `dev/app/resibo` before every frontend commit. The last one is what was actually done this time. |
+| 22 | **How does the frontend get built and deployed?** (§7.4) | nothing — **answered and built** | 2026-11-24 | **mostly closed.** CI builds `client/dist`, `scripts/deploy-client.sh` rsyncs it into `/var/www/resibo/live`, nginx vhost `resibo-web` serves it at `https://resibo.polbinsenthabyer.uk`, and it is verified live. **What remains:** no runner carries the `resibo-deploy` label, so both `deploy` jobs are inert and releases are the manual commands in §7.4. Register a runner for this repository and set `DEPLOY_ENABLED=true`. |
+| 23 | ~~Two branches each carry a copy of this plan~~ (§7.1) | — | 2026-11-24 | **RESOLVED the same day it was raised.** The monorepo retired `dev/api/resibo` and `dev/app/resibo` in favour of the single `dev/resibo`, so there is one copy of this document again. It cost a rebase and a section renumbering first, which is the evidence for why it was worth resolving rather than managing. |
 
 ---
 
@@ -2146,6 +2274,12 @@ trivia the next session cannot reuse.
 | 2026-11-24 | **The bearer token is kept in `localStorage`, recorded as provisional rather than settled** (§5.6) | It is what a stateless `Authorization: Bearer` API makes easy, and the backend is deliberately stateless with no session cookie (§5.4). The cost is real: any XSS on the origin can read the token, and there is no revocation (§12 #18), so a stolen token is good for its full eight hours. The alternative — an httpOnly cookie — needs the backend to set it and brings CSRF back with it. Recorded here so that it is a known trade to revisit alongside §1.3, rather than an accident of scaffolding. | Claude |
 | 2026-11-24 | **The frontend branch is rebased onto `dev/api/resibo` before committing, rather than left to diverge** (§7.1, §12 #23) | Forced by what happened on the first frontend commit: the branch was cut at `4883414`, and `0135659` and `e125c6e` landed on the backend branch while the client was being written — adding §5.4, §5.5 and §12 #17–19. Committing without rebasing would have produced two different documents both calling themselves version 0.8, with two different §5.4s. Rebasing first is the cheapest way to keep one plan rather than two, and it is now the expected step before any frontend commit. | Claude |
 | 2026-11-24 | **The client calls the deployed API by default; a local backend is the opt-in** (§5.6) | Owner's instruction, and it makes the frontend runnable alone — `npm run dev` with no backend, no database and no JDK, which is the difference between a scaffold someone can look at and one they have to assemble first. Verified rather than assumed: the live endpoint returns 200 and the preflight from `http://localhost:5173` is allowed. The accepted cost is that **development points at production**, which is harmless only while every call is a read. Mitigated visibly rather than silently — `env.isUsingDeployedApi` drives a notice on the status page, and the page prints the base URL — and recorded as something to revisit before the first mutating screen, since it is one constant in `src/config/env.ts`. | Owner, trade-off recorded by Claude |
+| 2026-11-24 | **One repository, one branch `dev/resibo`, with `client/` and `server/` at the root** — replacing both the root-level backend and the `dev/api` + `dev/app` split (§7.1, §7.4) | Owner's decision, taken after the two-branch layout produced a concrete failure the same day: the frontend branch was cut at `4883414`, two documentation commits landed on the backend branch while work was in progress, and the frontend's plan section had to be renumbered and rebased before it could be committed, because both copies claimed to be version 0.8. Branches model divergent versions of the *same* content that are meant to converge; two applications never converge, so the split bought drift rather than independence. One tree also makes a cross-stack change — an endpoint and its caller — a single reviewable commit, which matters here because `LoginResponseDto` had already changed under the client once. | Owner |
+| 2026-11-24 | **Independent deploys come from CI path filters and disjoint deploy targets, not from the repository layout** (§7.4) | The owner's actual requirement was that a frontend release must not redeploy the backend, and separate branches were the assumed way to get it. They are not: two branches still need two workflows, and give drift as well. `client-ci.yml` filters on `client/**` and `server-ci.yml` on `server/**`, so a client-only commit never *starts* the server workflow — the run is not queued, not queued-and-skipped. The stronger guarantee is underneath: the backend deploy builds an image and restarts a container on `127.0.0.1:8083`, the frontend deploy rsyncs files into `/var/www/resibo/live` with nothing restarting. They share no process, port or directory, so one cannot redeploy the other even if a workflow tried. | Owner's requirement, mechanism by Claude |
+| 2026-11-24 | **The Docker build context is `./server`, not the repository root** (§7.4) | Before the split, `client/` sat inside the context and was kept out of the image by a `.dockerignore` rule — a rule someone has to remember. Narrowing the context makes it structural: `node_modules` is outside the context and cannot enter the image even if the rule is deleted. The deploy entry points (`docker-compose.yml`, `scripts/`) deliberately stayed at the repository root so the server's existing command, `cd /opt/resibo/app && git pull && bash scripts/deploy.sh`, did not change — verified by redeploying the API from the new layout and watching the health gate pass. | Claude |
+| 2026-11-24 | **The client is static files served by nginx, not a container** (§7.4) | Owner's choice between the two patterns already in the house. It is gainsoclock's frontend arrangement — `/var/www/<project>/<env>`, vhost `<project>-web`, `try_files $uri $uri/ /index.html` for SPA routing — and it is the simplest correct thing for a bundle of static files: no image, no port, no healthcheck, and **nothing restarts on deploy**, which is itself the separation the owner wanted. The backend's container pattern buys a health gate and an atomic rollback unit, neither of which a directory of files needs. | Owner |
+| 2026-11-24 | **The client's nginx vhost lives only on the server, written by `scripts/setup-client-server.sh`** | Owner's call, and consistent with every other vhost on that host — `resibo`, `gainsoclock-web`, `eloms` all exist only in `/etc/nginx/sites-available`. A committed `.conf` would have been a second source of truth that drifts, which is the exact problem the monorepo had just removed from this document. The script is the reproducible artifact, so a rebuilt server is one command away. It stages the file as the invoking user and moves it with `install`, never through a `sudo` pipe (§8.1). | Owner |
+| 2026-11-24 | **The SSH key is authorised on the server; password authentication is no longer used by a session** | The standing task had been open since the first deployment, and it stopped being a convenience item when piping a password into `sudo` wrote a credential into a world-readable nginx config (§8.1). `id_ed25519` is now in `authorized_keys` and key-only authentication is verified with `PasswordAuthentication=no`. Where a password is still unavoidable — `sudo` on this host requires one — it is given to `sudo -S` as the **only** consumer of stdin, with the remote command passed as an ssh argument rather than through `bash -s`. The earlier incident happened precisely because a heredoc and a piped password shared one stdin. | Claude |
 
 ---
 
@@ -2163,3 +2297,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.8 | Recorded authentication (`54c5e21`, `963c737`, `d30000f`, `8b57196`). Added **§5.4 "Authentication and security"** — the five new dependencies and why jjwt is 0.13 and not gainsoclock's 0.11.5, the `user_role` and `user` tables with their apply order and seeded roles, the full access-rules table with its default-deny ending, the two real HTTP error statuses, the signing key and its no-default and 32-character rules, the role model, **the public-signup bootstrap with its warning**, the new `E01xx` error codes and why `E0106` covers three failures, CORS, the move of products behind ADMIN with the `Admin<Name>Controller` naming rule, **three traps** (native `EXISTS` returns `Integer`, `/error` must be permitted, Boot 4 uses Jackson 3), and what was verified against the live public API. Added **§5.5 "Repositories are native SQL"** — `countQuery`, column-name sorting via `SORT_COLUMNS`, and the collation that makes `LOWER()` unnecessary. §5's decision table: auth is **JWT in use**, a password-hashing row added, persistence and migrations rows corrected, tests now 22. §5.1 gains the five dependencies, the `jwt` block, the seven env keys, **the full eight-endpoint API surface**, and a note that `.env.example` and CI are both missing `JWT_SECRET`. §6.1's tree redrawn (around thirty classes, not six) and **the "reversal is cheap" claim withdrawn** in §6.1, §6.1.1 and §12 #9. §6.1.2 records the `Admin<Name>Controller` rule, that almost every gainsoclock convention now exists, and the deliberate `UserUtility` divergence. §4 notes that three of its rows now exist in the database ahead of the section being answered. §7's environments table, §7.2 and §7.3 corrected — three tables, eight endpoints, `JWT_SECRET` in the server env file, and edge authentication reframed as hardening. §8 settles how the signing key is held and adds two inventory rows (the JWT key, and the exposed application admin account — **username only, never the password**). §8.1: risk 1 extended to the admin account, risk 5 corrected now that tables exist, and **new risk 6 for the signup bootstrap**, which replaces the old "the whole API is open" exposure. §10's backup rows and §11's phase notes corrected — phase 1 is substantially delivered and phase 2 partly, and backups are now a real gap. §12 gains #17 (should signup stay public), #18 (no refresh or revocation), #19 (CORS is open), #20 (`JWT_SECRET` missing from `.env.example` and CI) and #21 (is native-SQL-everywhere a rule), with #6, #9, #12, #13 and #15 restated against what now exists. Fifteen decisions appended to §13. **No secret value, server address or OS account name appears anywhere in this document.** | Claude |
 | 2026-11-24 | 0.9 | Recorded the **React client** (§5.6): its location at `src/main/client`, the new branch `dev/app/resibo`, the versions actually installed (Vite 8, React 19, TypeScript 7, React Router 7, sass, oxlint, Prettier), the folder structure and its one import rule, the API layer and why it exists, what was deliberately **not** built (no login screen, no formatting helpers, no tests, no state library, no deployment path), and what was verified — including that `./mvnw clean compile` is unaffected and that the client has **never been run against the live API**. §5's six frontend rows updated from "Open" to what is in use, and the "Repo layout" row settled. §7.1 gains the `dev/app/resibo` row, the amended standing instruction, and the warning that two branches now carry this document. §12 gains **#22** (nothing builds or deploys the frontend) and **#23** (two copies of this plan, which already bit once — this version was written on a branch cut before 0.8 landed and had to be rebased and renumbered). Six decisions appended to §13. | Claude |
 | 2026-11-24 | 0.10 | The client now defaults to the **deployed** API instead of a local backend (§5.6), with a new *Which API it talks to* subsection covering the trade, the two visible mitigations and the `VITE_API_BASE_URL=/api` escape hatch. §5.6's dev-server row rewritten, and its verification table split: the deployed endpoint and its CORS preflight are now **verified by `curl`**, while the client in a browser is still **not** verified. One decision appended to §13. | Claude |
+| 2026-11-24 | 0.11 | **The repository is now one branch, `dev/resibo`, with `client/` and `server/` at the root**, and the client is deployed. Added **§7.4 "Deploying the client, and why it cannot redeploy the API"** — the two deploy paths side by side, the three levels at which they are independent (different directories, different vhosts, different path-filtered workflows), the one-time setup script, the deploy procedure with `index.html` installed last, the Cloudflare whole-config `PUT` warning, and what was verified live. §0 records the single branch and flags the stale second clone. §5.6's location and branch rows updated to `client/` and `dev/resibo`. §5's "Repo layout" row settled. §12 **#22 mostly closed** — built and verified, with only the missing self-hosted runner left — and **#23 resolved**, since one branch means one copy of this document. Six decisions appended to §13, including why path filters rather than branches give independent deploys, and the SSH key now being authorised. | Claude |

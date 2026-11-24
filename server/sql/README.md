@@ -15,7 +15,7 @@ sql/
 
 Hibernate runs with `ddl-auto: none` — see `src/main/resources/application.yaml`.
 The application never creates, alters or drops a table. That is deliberate and
-is recorded with its reasoning in §5.3 of [`resibo-plan.md`](../resibo-plan.md):
+is recorded with its reasoning in §5.3 of [`resibo-plan.md`](../../resibo-plan.md):
 if Resibo ends up issuing BIR-registered receipts, an ORM quietly altering a
 sales table on startup is exactly the kind of change that destroys an audit
 trail, and it leaves no migration, no review and no record of what it did.
@@ -71,7 +71,7 @@ finished until those two rows are there.
 
 After applying `user.sql` on a new environment, **create the admin account
 immediately**: signup is public and the first account on an empty `user` table
-becomes ADMIN. See §5.4 of [`resibo-plan.md`](../resibo-plan.md).
+becomes ADMIN. See §5.4 of [`resibo-plan.md`](../../resibo-plan.md).
 
 ## Known gap
 

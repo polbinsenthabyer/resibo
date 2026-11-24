@@ -55,35 +55,57 @@ Two of them govern the whole design:
 | Branch | Contents |
 |---|---|
 | `main` | `README.md` only. Never application code. |
-| `dev/api/resibo` | The backend, this file, and the plan. **Backend work commits directly here.** |
-| `dev/app/resibo` | The React client at `src/main/client`, on top of a full copy of the backend. **Frontend work commits directly here.** Cut from `dev/api/resibo` at `e125c6e`, 2026-11-24. |
+| **`dev/resibo`** | **Everything** — `client/`, `server/`, `scripts/`, this file and the plan. **All work commits directly here.** |
 
-Commit straight to the branch for the half you are changing — no feature
-branches, no pull requests — and push every commit. Touch `main` only to update
-the README. Keep commit messages brief and precise; Conventional Commits,
-imperative mood.
+Commit straight to `dev/resibo` — no feature branches, no pull requests — and
+push every commit. Touch `main` only to update the README. Keep commit
+messages brief and precise; Conventional Commits, imperative mood.
 
-> ⚠️ **This file and `resibo-plan.md` exist on both development branches, and
-> nothing keeps the copies in step.** It has already caused one rework: the
-> frontend branch was cut at `4883414`, two documentation commits landed on
-> `dev/api/resibo` while the client was being written, and the frontend's plan
-> section had to be renumbered before it could be committed. **Fetch and rebase
-> `dev/app/resibo` onto `dev/api/resibo` before every frontend commit**, and if
-> you change either document, say so in the commit message. Plan §12 #23.
+`dev/api/resibo` and `dev/app/resibo` are **retired** (2026-11-24). The split
+was meant to let the two halves move independently and did not deliver that —
+it delivered two copies of the plan, both numbered 0.8, in a single day.
+Independence comes from the CI path filters, not the branch. Plan §7.1, §7.4.
+
+> ⚠️ **One branch, one checkout.** A second clone may still exist at
+> `personal/resibo` on the retired `dev/api/resibo`. Delete or re-point it —
+> two trees for one project is how the last divergence started.
+
+## Layout
+
+```
+client/     React + Vite + TypeScript + SCSS      (see client/README.md)
+server/     Spring Boot — pom.xml, src/, sql/, Dockerfile
+scripts/    deploy.sh (API) · deploy-client.sh · setup-client-server.sh
+docker-compose.yml, .github/workflows/   at the root, shared
+```
+
+A commit may touch one half or both. **Touching both is normal and correct**
+for a change that spans the contract — an endpoint and its caller — and it is
+exactly what the old branch split made impossible.
+
+**The Docker build context is `./server`, not the repository root.** That is
+what keeps `client/` and `node_modules` out of the API image — structurally,
+not by a `.dockerignore` rule someone has to remember. Do not widen it.
+
+The deploy entry points stay at the root on purpose, so the server's command
+is unchanged: `cd /opt/resibo/app && git pull && bash scripts/deploy.sh`.
 
 ## The frontend
 
-`src/main/client` on `dev/app/resibo` — Vite, React, TypeScript, plain SCSS.
-Conventions are in `src/main/client/README.md`; the write-up with its reasoning
-is plan §5.6.
+`client/` — Vite, React, TypeScript, plain SCSS. Conventions are in
+`client/README.md`; the write-up with its reasoning is plan §5.6, and how it
+reaches the server is §7.4.
 
-Two things about the location that must stay true:
+**Live at `https://resibo.polbinsenthabyer.uk`** — static files in
+`/var/www/resibo/live`, served by the nginx vhost `resibo-web`.
 
-- **Maven ignores it.** Only `src/main/java` and `src/main/resources` are build
-  inputs, so `src/main/client` is invisible to `./mvnw`. Verified by compiling.
-- **`.dockerignore` excludes `src/main/client/`. Do not remove that rule.** The
-  `Dockerfile` does `COPY src/ src/`, so without it every backend build drags
-  `node_modules` into the build context and busts its dependency cache layer.
+> **A frontend deploy cannot redeploy the API, and that is deliberate.** The
+> backend is a container on `127.0.0.1:8083`; the frontend is files under
+> `/var/www`. Different directories, different vhosts, and
+> `client-ci.yml` / `server-ci.yml` filter on `client/**` and `server/**` so a
+> one-sided commit never starts the other workflow. **If you add a build input
+> at the root, add it to the right workflow's `paths`** — a file in neither
+> will never trigger a deploy.
 
 The client has **one** place that calls `fetch` — `src/api/http.ts` — because
 this API answers a failed request with HTTP 200 and an error code in the
@@ -91,13 +113,16 @@ envelope, and only uses a real status for 401 and 403. It unwraps `data` or
 throws `ApiError`. **Do not call `fetch` from a component**, and do not add a
 second HTTP path.
 
-Nothing builds or deploys the client: no CI step, no vhost, no hostname
-(plan §12 #22). There is no login screen, no formatting helper for money or
-dates — §10 is still blank — and no test runner.
+Still missing: no login screen, no formatting helper for money or dates —
+§10 is still blank — and no test runner at all. And **no CI deploy yet**:
+both workflows declare a `deploy` job on a runner labelled `resibo-deploy`,
+and no runner carries that label, so releases are the manual commands in
+plan §7.4.
 
 ## Architecture
 
-The backend lives at the **repository root** — `pom.xml` and `src/`, not under
+The backend lives under **`server/`** — `server/pom.xml`, `server/src/`, not at
+the repository root (it moved there on 2026-11-24, plan §7.1) and not under
 `backend/` — and is packaged **layer-first** at the base package
 `com.api.resibo`, mirroring the sibling project gainsoclock:
 
@@ -320,14 +345,15 @@ not improvise one.
 | Public URL | `https://resibo-api.polbinsenthabyer.uk` |
 | Runtime | Docker container `resibo-api` on the shared Ubuntu server, published on `127.0.0.1:8083` **only** — never on the LAN |
 | In front of it | the host's nginx vhost, matched by `server_name` → the existing `personal-projects` Cloudflare tunnel |
-| Checkout on the server | `/opt/resibo/app`, on `dev/api/resibo` |
+| Checkout on the server | `/opt/resibo/app`, on `dev/resibo` |
 | Env file | `/opt/resibo/resibo.env`, mode `0600`, outside the checkout and not in git — holds `APP_ENV=prod`, **the datasource credentials** and **`JWT_SECRET`**; the application will not start without it |
 
-**To deploy** — manual, on the server. `.github/workflows/ci.yml` exists and its
-`build` job is the test gate (it runs `mvnw verify` against a throwaway MariaDB
-service container); it also declares a `deploy` job on a self-hosted runner,
-which is **not documented in plan §7.3 and not the path to follow** until plan
-§12 #16 is answered. The manual procedure is:
+**To deploy the API** — manual, on the server. `ci.yml` is gone; there are now
+two workflows, `server-ci.yml` and `client-ci.yml`, each filtered to its own
+half so one never deploys the other (plan §7.4). Their `build` jobs are the
+test gates. Their `deploy` jobs need a self-hosted runner labelled
+`resibo-deploy`, and **no runner carries that label**, so the manual
+procedure is still the real one:
 
 ```sh
 cd /opt/resibo/app
@@ -419,10 +445,14 @@ least 32 characters**, because neither has a default and one test starts the
 Spring context:
 
 ```powershell
+cd server
 $env:JAVA_HOME = "$env:USERPROFILE\.jdks\ms-17.0.20"   # Microsoft OpenJDK 17.0.20
 .\mvnw.cmd -B clean verify     # compile + tests; needs DATASOURCE_URL, JWT_SECRET et al.
-.\mvnw.cmd spring-boot:run     # run on :8083 per .env.dev, or SERVER_PORT
+.\mvnw.cmd spring-boot:run     # run on :8083 per server/.env.dev
 ```
+
+`.env.dev` lives at **`server/.env.dev`** now, not the repository root:
+`spring.config.import` resolves it relative to the working directory.
 
 `docker compose up --build` is the alternative that needs no `JAVA_HOME` at all
 — the build stage carries its own JDK — and serves on `:8083` locally. It is
@@ -432,12 +462,16 @@ The frontend is a separate toolchain and needs no `JAVA_HOME`. Node 26 and npm
 are on `PATH`:
 
 ```powershell
-cd src\main\client
+cd client
 npm install
-npm run dev        # :5173, proxies /api to :8083 — so run the backend too
+npm run dev        # :5173 — talks to the DEPLOYED API, no backend needed
 npm run build      # tsc -b, then vite build into dist/
 npm run lint       # oxlint, not ESLint
 ```
+
+Set `VITE_API_BASE_URL=/api` to use a local backend instead; the dev server
+proxies `/api` to `:8083`. The default points development at production,
+which is harmless while every call is a read — see `client/README.md`.
 
 **The checkout is still blocked.** The scaffold, the database connection, the
 product table and authentication were each the owner lifting their own hold for

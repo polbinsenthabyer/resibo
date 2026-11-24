@@ -83,12 +83,16 @@ written up in [§5.5 of the plan](resibo-plan.md#55-repositories-are-native-sql-
 
 ## Backend architecture
 
-One deployable Spring Boot application. The code sits at the repository root and
-is packaged **layer-first** at the base package `com.api.resibo`, matching the
-sibling project `gainsoclock` that Resibo takes its conventions from:
+One repository with two halves — `client/` for the React application and
+`server/` for the Spring Boot API — and they deploy independently of one
+another (see *Branches* below).
+
+The backend is packaged **layer-first** at the base package `com.api.resibo`,
+matching the sibling project `gainsoclock` that Resibo takes its conventions
+from:
 
 ```
-src/main/java/com/api/resibo/
+server/src/main/java/com/api/resibo/
 ├── ResiboApplication.java
 ├── configs/         SecurityConfig, and jwt/ for the filter, util and handlers
 ├── controllers/     AuthController, HealthController, and admin/ for admin-only
@@ -191,20 +195,21 @@ The full detail is in
 
 ## Repository layout
 
-This repository keeps its branches deliberately separate:
-
 | Branch | Contents |
 |---|---|
 | `main` | This README, and nothing else. |
-| `dev/api/resibo` | Backend working branch — `resibo-plan.md`, `CLAUDE.md`, and the application itself. |
+| `dev/resibo` | Everything — `client/`, `server/`, `resibo-plan.md`, `CLAUDE.md`. |
 
-The `api` segment distinguishes backend work from frontend work; a frontend
-branch would be `dev/app/resibo`.
+One branch holds both halves, and they still release separately: the CI
+workflows filter on `client/**` and `server/**`, so a frontend commit never
+rebuilds the API, and the two deploy to different places — static files under
+`/var/www` versus a container on a loopback port. `dev/api/resibo` and
+`dev/app/resibo` were an earlier attempt at the same goal and are retired.
 
 **The plan and the code are not on `main`.** To get them:
 
 ```sh
-git switch dev/api/resibo
+git switch dev/resibo
 ```
 
 The rest of the application arrives as the plan's blocking questions are
