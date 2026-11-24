@@ -1,7 +1,6 @@
 # Resibo — client
 
-The React frontend. Lives at `src/main/client` inside the backend repository,
-on branch `dev/app/resibo`.
+The React frontend. Lives at `client/` in the Resibo monorepo on `dev/resibo`.
 
 > The project's source of truth is [`resibo-plan.md`](../resibo-plan.md) at
 > the repository root. Read it before making decisions here — product scope,
@@ -11,7 +10,7 @@ on branch `dev/app/resibo`.
 ## Running it
 
 ```sh
-cd src/main/client
+cd client
 npm install
 npm run dev          # http://localhost:5173
 ```
@@ -27,7 +26,7 @@ let the dev proxy forward to `:8083`:
 VITE_API_BASE_URL=/api npm run dev      # PowerShell: $env:VITE_API_BASE_URL="/api"; npm run dev
 ```
 
-Then start the backend too (`./mvnw spring-boot:run` from the repository root).
+Then start the backend too (`./mvnw spring-boot:run` from `server/`).
 The browser sees a single origin that way, so CORS never applies.
 
 > ⚠️ **The default points development at production.** Harmless today — the
@@ -44,20 +43,17 @@ The browser sees a single origin that way, so CORS never applies.
 | `npm run lint` | oxlint |
 | `npm run format` | Prettier, write |
 
-## Why it is here and not at the repository root
+## Why it is separate from the backend
 
-The backend is a Maven project rooted at the repository root, and Maven treats
-only `src/main/java` and `src/main/resources` as inputs — so everything under
-`src/main/client` is invisible to the Java build. `.dockerignore` excludes this
-directory outright, so the backend image never carries it.
+The backend is a Maven project under `server/`. The Docker build context is
+`server/`, so `client/` and `node_modules` cannot enter the API image.
 
-This is the owner's call, recorded with its alternatives in `resibo-plan.md`
-§5.6 and §13. The sibling project gainsoclock puts its frontend at the root of
-a separate branch instead.
+The current monorepo layout and its rationale are recorded in `resibo-plan.md`
+§7.1, §7.4 and §13. The earlier `src/main/client` layout is historical.
 
-> ⚠️ **This branch carries a full copy of the backend, the plan and
-> `CLAUDE.md`.** Nothing keeps those copies in step with `dev/api/resibo`, so
-> **fetch and rebase onto it before every commit here** — plan §12 #23.
+> Both halves share `dev/resibo`. Coordinate API contract changes and edits to
+> shared files such as `resibo-plan.md`; the retired `dev/api/resibo` and
+> `dev/app/resibo` branches are no longer work targets.
 
 ## Structure
 

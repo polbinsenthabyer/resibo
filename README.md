@@ -2,13 +2,13 @@
 
 A point-of-sale application — Spring Boot, React, and MariaDB.
 
-> **Status: planning, with a deployed API that has login and a product table.**
+> **Status: planning, with a deployed API and one-page React client.**
 > The backend builds, runs, and is publicly reachable at
 > **<https://resibo-api.polbinsenthabyer.uk>**. It has **JWT authentication**
 > with two roles, three tables in MariaDB, and an admin-only product catalog.
-> That is all it does. There is **no checkout, no sale, no receipt, no payment,
-> no shift, no stock movement and no frontend** — so there is no POS yet. Scope,
-> the data model, and the architecture are still being settled in
+> The client at <https://resibo.polbinsenthabyer.uk> currently shows API health.
+> There is **no checkout, sale, receipt, payment, shift or stock movement**, so
+> there is no POS yet. Scope, the data model and architecture are still being settled in
 > [`resibo-plan.md`](resibo-plan.md) before the rest is built. That document is
 > the project's source of truth; this README is the summary of it.
 
@@ -30,7 +30,7 @@ checkout screen and little else.
 | Layer | Technology |
 |---|---|
 | Backend | Spring Boot 4.2.0 on Java 17, built with Maven, packaged as a `jar` |
-| Frontend | React — not started |
+| Frontend | React 19, Vite 8 and TypeScript 7 in `client/`; a one-page health client is deployed |
 | Database | MariaDB via Spring Data JPA — three tables: `product`, `user_role`, `user` |
 | Auth | Spring Security with a stateless JWT, HS256, 8-hour token |
 | Hosting | Docker on a self-hosted Ubuntu server, reverse-proxied by nginx, fronted by a Cloudflare tunnel |
@@ -43,7 +43,7 @@ API differs between the two. Four test starters go with them. **No migrations
 tool is in the build**, which is now a gap rather than an absence: three tables
 exist and nothing tracks which environment has them.
 
-The remaining choices — migrations, frontend tooling, test frameworks — are
+The remaining choices — migrations and test frameworks — are
 proposed with recommendations in
 [§5 of the plan](resibo-plan.md#5-tech-stack) and await sign-off.
 

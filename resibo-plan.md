@@ -5,8 +5,7 @@
 > disagree, one of them is a bug: either the code drifted, or this file went
 > stale and must be corrected in the same change that revealed it.
 
-**Status: planning, with a deployed API that now has login and a product
-table.** A Spring Boot application runs on the server in Docker behind the
+**Status: planning, with a deployed API and one-page React client.** A Spring Boot application runs on the server in Docker behind the
 host's nginx, fronted by the Cloudflare tunnel that already serves the sibling
 projects, answering on `https://resibo-api.polbinsenthabyer.uk` (§7.3). It
 connects to MariaDB as a dedicated least-privilege account, with Hibernate
@@ -16,7 +15,7 @@ catalog.
 
 **Read that narrowly.** What exists is a way to log in and a list of products.
 There is no checkout, no sale, no receipt, no payment, no shift, no stock
-movement and no frontend — so there is no POS. **Every `[BLOCKER]` item below is
+movement; the client currently shows API health only — so there is no POS. **Every `[BLOCKER]` item below is
 still unanswered, and nothing that depends on one should be written until it
 is.** The two roles are a working minimum, not the answer to §1.3. The
 `product` table is a name, a price and a stock count, not the §4 domain model.
@@ -67,16 +66,26 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.11 — one repository, client/ and server/, both deployed; scope still unfilled |
+| Document version | 0.12 — frontend/backend agent roles and durable Codex handoff recorded; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-24 |
-| Last updated by | Claude (split the repository into client/ and server/, and deployed the client) |
+| Last updated by | Codex (recorded agent ownership and context handoff) |
 | Plan status | **AWAITING OWNER INPUT** — the API is deployed and authenticated (§5.4, §7.3), and the React client is now deployed too, at `https://resibo.polbinsenthabyer.uk` (§5.6, §7.4). There is still no checkout, no sale and no receipt, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
-| Working copy | `%USERPROFILE%\sprintify_solutions\personal\app\resibo` on `dev/resibo` — one branch, one tree. ⚠️ `%USERPROFILE%\sprintify_solutions\personal\resibo` is a **stale second clone** still on the retired `dev/api/resibo`; delete it or re-point it, or two sessions will edit two trees. |
+| Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` on `dev/resibo`. A second clone at `%USERPROFILE%\sprintify_solutions\personal\app\resibo` is a duplicate; do not edit it until its fate is decided. |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
 | Production URL | `https://resibo-api.polbinsenthabyer.uk` — health, auth, and admin-only products; see §7.3 |
 | This document lives on | branch `dev/resibo`, the single working branch — see §7.1. The two-branch split that made this document exist twice is retired. |
 | Vault notes | `Obsidian Vault/Projects/personal/resibo/` |
+
+---
+
+### 0.1 Agent roles and context continuity
+
+The owner assigned **Codex to frontend work** in `client/` and **Claude Code to backend work** in `server/`. This is an ownership assignment, not a claim that either agent is currently running. Both work on the single `dev/resibo` branch. Contract changes that touch both halves need coordination, and a reviewer accepts a handoff after checking evidence; the implementer does not self-declare it accepted.
+
+For Codex, `AGENTS.md` is the automatic entry point and `CODEX.md` is a short frontend handoff snapshot. **This document remains the product source of truth.** The Obsidian vault's four standard project notes remain the durable record: the hub for standing facts, `Decisions.md` for reasons, `Changelog.md` for dated changes and actual verification, and `Tasks.md` for open work. `CODEX.md` points to them and records the current frontend state and next action; it does not replace or duplicate the specification.
+
+For each material frontend or backend update, change this plan in the same change as behavior or scope, append a decision with its rationale to §13 when one is made, bump the document version and append §14, and update the relevant vault notes as work happens. Refresh the agent handoff before ending the task. Do not record secrets or full conversation transcripts in any of these files.
 
 ---
 
@@ -1065,10 +1074,10 @@ so the filters cannot be used to inject SQL.
 
 ### 5.6 The frontend client (2026-11-24)
 
-A React application scaffolded with Vite, living at **`src/main/client`** on
-branch **`dev/app/resibo`**. It renders, builds, type-checks and lints, and it
-talks to the API's health endpoint. **It is not a POS screen and not a login
-screen.**
+A React application scaffolded with Vite, now living at **`client/`** on the
+single **`dev/resibo`** branch. It renders, builds, type-checks and lints, is
+deployed as static files (§7.4), and calls the API's health endpoint. **It is
+not a POS screen and not a login screen.**
 
 | Field | Value |
 |---|---|
@@ -1085,35 +1094,19 @@ screen.**
 
 #### Where it lives, and why that was a decision
 
-The owner chose `src/main/client` from three options laid out first: the
-industry-common monorepo (a `frontend/` directory beside `pom.xml` on one
-branch), a separate branch cut from `main` with the client at the repository
-root — which is what [gainsoclock] does — or nesting it under `src/main`.
-
-What makes the chosen location safe, and must stay true:
-
-- **Maven ignores it.** Only `src/main/java` and `src/main/resources` are build
-  inputs. Verified: `./mvnw -B clean compile` compiles 32 sources, copies one
-  resource from `src/main/resources`, and never reads `src/main/client`.
-- **`.dockerignore` excludes `src/main/client/` outright.** The `Dockerfile`
-  does `COPY src/ src/`, so without that rule every backend image build would
-  pull `node_modules` into the build context and bust its dependency cache
-  layer on every frontend commit. That is the one real cost of this location,
-  and it is paid once, here.
-
-What it costs, recorded so nobody rediscovers it as a surprise: the frontend
-sits on a different branch from the backend, so **no commit can change an
-endpoint and its caller together.** That is not hypothetical —
-`LoginResponseDto` lost its `expiresInSeconds` field in `4883414`. The contract
-has to be held somewhere both branches answer to, and today that is the Postman
-`RESIBO` collection.
+The first scaffold used `src/main/client` on `dev/app/resibo`. That history and
+the reasons for replacing it are in §7.1 and §13. The current layout puts
+`client/` beside `server/` on one branch. The Docker build context is
+`./server`, which keeps client files out of the API image. An endpoint and its
+caller can now change in one commit; the API contract still needs review by
+both owners when it changes.
 
 #### Structure
 
 Feature-first, with shared layers underneath:
 
 ```
-src/main/client/src/
+client/src/
 ├── main.tsx              entry: mounts App, loads the one global stylesheet
 ├── App.tsx               app-wide providers (router today)
 ├── app/                  routing — route table and path constants
@@ -2280,6 +2273,7 @@ trivia the next session cannot reuse.
 | 2026-11-24 | **The client is static files served by nginx, not a container** (§7.4) | Owner's choice between the two patterns already in the house. It is gainsoclock's frontend arrangement — `/var/www/<project>/<env>`, vhost `<project>-web`, `try_files $uri $uri/ /index.html` for SPA routing — and it is the simplest correct thing for a bundle of static files: no image, no port, no healthcheck, and **nothing restarts on deploy**, which is itself the separation the owner wanted. The backend's container pattern buys a health gate and an atomic rollback unit, neither of which a directory of files needs. | Owner |
 | 2026-11-24 | **The client's nginx vhost lives only on the server, written by `scripts/setup-client-server.sh`** | Owner's call, and consistent with every other vhost on that host — `resibo`, `gainsoclock-web`, `eloms` all exist only in `/etc/nginx/sites-available`. A committed `.conf` would have been a second source of truth that drifts, which is the exact problem the monorepo had just removed from this document. The script is the reproducible artifact, so a rebuilt server is one command away. It stages the file as the invoking user and moves it with `install`, never through a `sudo` pipe (§8.1). | Owner |
 | 2026-11-24 | **The SSH key is authorised on the server; password authentication is no longer used by a session** | The standing task had been open since the first deployment, and it stopped being a convenience item when piping a password into `sudo` wrote a credential into a world-readable nginx config (§8.1). `id_ed25519` is now in `authorized_keys` and key-only authentication is verified with `PasswordAuthentication=no`. Where a password is still unavoidable — `sudo` on this host requires one — it is given to `sudo -S` as the **only** consumer of stdin, with the remote command passed as an ssh argument rather than through `bash -s`. The earlier incident happened precisely because a heredoc and a piped password shared one stdin. | Claude |
+| 2026-11-24 | Codex owns frontend work and Claude Code owns backend work on `dev/resibo`; Codex maintains `CODEX.md` through `AGENTS.md` as a short handoff while the plan and vault remain canonical | The role split reduces overlapping edits, and an automatically discoverable handoff lets a new session recover frontend state after an interruption without creating a competing product specification. Shared contract changes require coordination and reviewer acceptance. | Owner |
 
 ---
 
@@ -2298,3 +2292,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.9 | Recorded the **React client** (§5.6): its location at `src/main/client`, the new branch `dev/app/resibo`, the versions actually installed (Vite 8, React 19, TypeScript 7, React Router 7, sass, oxlint, Prettier), the folder structure and its one import rule, the API layer and why it exists, what was deliberately **not** built (no login screen, no formatting helpers, no tests, no state library, no deployment path), and what was verified — including that `./mvnw clean compile` is unaffected and that the client has **never been run against the live API**. §5's six frontend rows updated from "Open" to what is in use, and the "Repo layout" row settled. §7.1 gains the `dev/app/resibo` row, the amended standing instruction, and the warning that two branches now carry this document. §12 gains **#22** (nothing builds or deploys the frontend) and **#23** (two copies of this plan, which already bit once — this version was written on a branch cut before 0.8 landed and had to be rebased and renumbered). Six decisions appended to §13. | Claude |
 | 2026-11-24 | 0.10 | The client now defaults to the **deployed** API instead of a local backend (§5.6), with a new *Which API it talks to* subsection covering the trade, the two visible mitigations and the `VITE_API_BASE_URL=/api` escape hatch. §5.6's dev-server row rewritten, and its verification table split: the deployed endpoint and its CORS preflight are now **verified by `curl`**, while the client in a browser is still **not** verified. One decision appended to §13. | Claude |
 | 2026-11-24 | 0.11 | **The repository is now one branch, `dev/resibo`, with `client/` and `server/` at the root**, and the client is deployed. Added **§7.4 "Deploying the client, and why it cannot redeploy the API"** — the two deploy paths side by side, the three levels at which they are independent (different directories, different vhosts, different path-filtered workflows), the one-time setup script, the deploy procedure with `index.html` installed last, the Cloudflare whole-config `PUT` warning, and what was verified live. §0 records the single branch and flags the stale second clone. §5.6's location and branch rows updated to `client/` and `dev/resibo`. §5's "Repo layout" row settled. §12 **#22 mostly closed** — built and verified, with only the missing self-hosted runner left — and **#23 resolved**, since one branch means one copy of this document. Six decisions appended to §13, including why path filters rather than branches give independent deploys, and the SSH key now being authorised. | Claude |
+| 2026-11-24 | 0.12 | Recorded the owner-assigned Codex frontend and Claude Code backend roles, the shared-file and review method, and the `AGENTS.md` to `CODEX.md` handoff. Corrected the opening frontend status and designated working copy; the four vault notes remain the durable project record. | Codex |
