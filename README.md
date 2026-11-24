@@ -58,11 +58,20 @@ Each module keeps its entities and repositories private and exposes only an
 The full rules, and the open questions about how to enforce them, are in
 [§6.1 of the plan](resibo-plan.md#61-backend-structure--modular-monolith-decided).
 
-## Repository
+## Repository layout
 
-- `resibo-plan.md` — the plan and source of truth. Read this first.
-- `README.md` — this summary.
-- Remote: `https://github.com/polbinsenthabyer/resibo.git`
+This repository keeps its branches deliberately separate:
+
+| Branch | Contents |
+|---|---|
+| `main` | This README, and nothing else. |
+| `dev/resibo` | The working branch — `resibo-plan.md` and, in time, the application. |
+
+**The plan is not on `main`.** To read it:
+
+```sh
+git switch dev/resibo
+```
 
 Application code arrives once the plan's blocking questions are answered.
 
