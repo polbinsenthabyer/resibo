@@ -2,11 +2,12 @@
 
 A point-of-sale application — Spring Boot, React, and MariaDB.
 
-> **Status: planning, with a deployed API and one-page React client.**
+> **Status: planning, with a deployed API and React client.**
 > The backend builds, runs, and is publicly reachable at
 > **<https://resibo-api.polbinsenthabyer.uk>**. It has **JWT authentication**
 > with two roles, three tables in MariaDB, and an admin-only product catalog.
-> The client at <https://resibo.polbinsenthabyer.uk> currently shows API health.
+> The client at <https://resibo.polbinsenthabyer.uk> has health, login, and
+> signup pages.
 > There is **no checkout, sale, receipt, payment, shift or stock movement**, so
 > there is no POS yet. Scope, the data model and architecture are still being settled in
 > [`resibo-plan.md`](resibo-plan.md) before the rest is built. That document is
@@ -30,7 +31,7 @@ checkout screen and little else.
 | Layer | Technology |
 |---|---|
 | Backend | Spring Boot 4.2.0 on Java 17, built with Maven, packaged as a `jar` |
-| Frontend | React 19, Vite 8 and TypeScript 7 in `client/`; a one-page health client is deployed |
+| Frontend | React 19, Vite 8 and TypeScript 7 in `client/`; health, login, and signup pages are deployed |
 | Database | MariaDB via Spring Data JPA — three tables: `product`, `user_role`, `user` |
 | Auth | Spring Security with a stateless JWT, HS256, 8-hour token |
 | Hosting | Docker on a self-hosted Ubuntu server, reverse-proxied by nginx, fronted by a Cloudflare tunnel |
@@ -177,10 +178,9 @@ notably **`E0106` covers unknown username, wrong password and disabled account
 alike**, with an identical message, so the endpoint cannot be used to find out
 which usernames are real.
 
-**CORS** is open to all origins so frontend work is not blocked, with
-`allowCredentials=false` — browsers reject credentials from a `*` origin, and
-the token travels in a header rather than a cookie. It needs replacing with
-real origins before this API holds live data.
+**CORS** allows the deployed client and the two local Vite origins
+(`localhost:5173` and `127.0.0.1:5173`). Other browser origins are refused.
+The token travels in a header rather than a cookie.
 
 > ⚠️ **Signup is public, and the first account on an empty system becomes
 > ADMIN.** After that an anonymous signup is always EMPLOYEE, whatever role it
