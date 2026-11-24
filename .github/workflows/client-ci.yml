@@ -1,0 +1,113 @@
+name: Resibo Client CI
+
+# Frontend only. The `paths` filter is what keeps the two halves independent:
+# a commit that touches only server/ never starts this workflow, and a commit
+# that touches only client/ never starts the server one — so the API container
+# is never rebuilt or restarted by a frontend change. See resibo-plan.md §7.4.
+on:
+  push:
+    branches: [dev/resibo]
+    paths:
+      - 'client/**'
+      - 'scripts/deploy-client.sh'
+      - '.github/workflows/client-ci.yml'
+  pull_request:
+    branches: [dev/resibo]
+    paths:
+      - 'client/**'
+      - 'scripts/deploy-client.sh'
+      - '.github/workflows/client-ci.yml'
+  # Ignores the paths filter, so a deploy can always be forced by hand.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - name: Get source code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          # package-lock.json is not at the repository root, so the cache key
+          # has to be pointed at it or npm caching silently never hits.
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # `npm run build` is `tsc -b && vite build`, so this is the type check
+      # as well as the bundle. A type error fails the build rather than
+      # shipping.
+      - name: Build
+        run: npm run build
+
+      # The built files are the artifact the deploy job consumes. The server
+      # has no Node installed and never builds the frontend itself — same
+      # division as gainsoclock's frontend pipeline.
+      - name: Save built files
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with:
+          name: resibo-client-dist
+          path: client/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    name: Deploy client to server
+    # Same three guards as the server workflow: never from a pull request,
+    # only the working branch, and DEPLOY_ENABLED set as a repository
+    # variable.
+    #
+    # ⚠️ No runner carries the `resibo-deploy` label today. The only runner on
+    # the server belongs to the gainsoclock repository and is labelled
+    # `gainsoclock-deploy`, so this job cannot run until a runner is
+    # registered for this repository. Until then the frontend is deployed by
+    # the manual procedure in resibo-plan.md §7.4.
+    if: >-
+      github.event_name != 'pull_request'
+      && github.ref == 'refs/heads/dev/resibo'
+      && vars.DEPLOY_ENABLED == 'true'
+    needs: build
+    runs-on: [self-hosted, resibo-deploy]
+
+    # Serialise client deploys against each other only. Deliberately a
+    # different group from the server's, so a backend deploy and a frontend
+    # deploy never wait on one another — they touch different things.
+    concurrency:
+      group: resibo-client-deploy-${{ github.ref }}
+      cancel-in-progress: false
+
+    timeout-minutes: 10
+
+    steps:
+      - name: Get deployment script
+        uses: actions/checkout@v7
+
+      - name: Download built files
+        uses: actions/download-artifact@v8
+        with:
+          name: resibo-client-dist
+          path: ${{ runner.temp }}/resibo-client-dist
+
+      # rsync into /var/www/resibo/live, swapping index.html last. Nothing
+      # restarts: nginx serves whatever is on disk at the next request, so the
+      # API is untouched and there is no downtime on either side.
+      - name: Deploy
+        run: bash scripts/deploy-client.sh "${RUNNER_TEMP}/resibo-client-dist" live

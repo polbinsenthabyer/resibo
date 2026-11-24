@@ -1,0 +1,39 @@
+# Keep the build context small and — more importantly — keep secrets and local
+# state out of the image entirely.
+#
+# The build context is server/, not the repository root (see
+# docker-compose.yml), so client/ and its node_modules are outside the context
+# by construction and need no rule here.
+
+# Secrets: never copied into a build context, under any name.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+secrets/
+
+# Build output — the image builds its own.
+target/
+build/
+
+# Version control and CI
+.git/
+.gitignore
+.gitattributes
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Docs and schema — not needed at runtime, and changing them should not bust
+# the dependency cache layer. The schema is applied by a person, never by the
+# application (ddl-auto: none).
+*.md
+sql/

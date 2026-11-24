@@ -1,20 +1,28 @@
 name: resibo
 
+# Only the backend runs as a container. The React client in client/ is a static
+# build: CI produces client/dist and the deploy rsyncs it into /var/www/resibo,
+# where nginx serves it. Nothing about the frontend restarts this service —
+# see resibo-plan.md §7.4.
+
 services:
   api:
     build:
-      context: .
+      # The build context is server/, not the repository root. That is what
+      # keeps client/ and node_modules out of the Java image entirely — a
+      # structural guarantee rather than a .dockerignore rule to remember.
+      context: ./server
       dockerfile: Dockerfile
     image: ${RESIBO_IMAGE:-resibo-api}:${RESIBO_TAG:-current}
     container_name: resibo-api
     restart: unless-stopped
 
     # Which env file supplies the values depends on the environment:
-    #   local   → .env.dev (the default)
+    #   local   → server/.env.dev (the default)
     #   server  → RESIBO_ENV_FILE=/opt/resibo/resibo.env
-    # It is never baked into the image — see .dockerignore.
+    # It is never baked into the image — see server/.dockerignore.
     env_file:
-      - path: ${RESIBO_ENV_FILE:-./.env.dev}
+      - path: ${RESIBO_ENV_FILE:-./server/.env.dev}
         required: false
 
     environment:
@@ -30,7 +38,7 @@ services:
       - "127.0.0.1:${HOST_PORT:-8083}:8080"
 
     # Lets the container reach services on the host — notably the MariaDB
-    # instance — as host.docker.internal, once persistence is added.
+    # instance — as host.docker.internal.
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

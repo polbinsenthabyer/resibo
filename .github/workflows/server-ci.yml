@@ -1,12 +1,31 @@
-name: Resibo CI
+name: Resibo Server CI
 
-# `main` holds only the README, so it is deliberately not a trigger here.
-# All application work lands on dev/api/resibo — see resibo-plan.md §7.1.
+# Backend only. The `paths` filter is what keeps the two halves independent:
+# a commit that touches only client/ never starts this workflow, so the API
+# image is not rebuilt and the container is not restarted. See
+# resibo-plan.md §7.4.
+#
+# Anything listed here is a backend build input. A file in neither workflow's
+# paths will never trigger a deploy — correct for docs, a silent problem for a
+# real input, so add new ones deliberately.
 on:
   push:
-    branches: [dev/api/resibo]
+    branches: [dev/resibo]
+    paths:
+      - 'server/**'
+      - 'docker-compose.yml'
+      - 'scripts/deploy.sh'
+      - 'scripts/rollback.sh'
+      - '.github/workflows/server-ci.yml'
   pull_request:
-    branches: [dev/api/resibo]
+    branches: [dev/resibo]
+    paths:
+      - 'server/**'
+      - 'docker-compose.yml'
+      - 'scripts/deploy.sh'
+      - 'scripts/rollback.sh'
+      - '.github/workflows/server-ci.yml'
+  # Ignores the paths filter, so a deploy can always be forced by hand.
   workflow_dispatch:
 
 permissions:
@@ -16,12 +35,15 @@ permissions:
 # workflow. Serialising everything means one deploy waiting on an unavailable
 # runner holds the group open, and every later run is cancelled as stale
 # pending — so a perfectly good build never reports a result.
-# Build and test must always be free to run and report.
 
 jobs:
   build:
     name: Build and test
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: server
 
     # The real database lives on a private network that GitHub-hosted runners
     # cannot reach, so the build gets a throwaway MariaDB of its own. Same
@@ -66,6 +88,9 @@ jobs:
           java-version: '17'
           distribution: temurin
           cache: maven
+          # The pom moved under server/, so the cache key has to follow it or
+          # the dependency cache silently never hits.
+          cache-dependency-path: server/pom.xml
 
       # Tests run here, on a clean machine, before anything touches the
       # server. The deploy job rebuilds the image from source on the server;
@@ -73,24 +98,27 @@ jobs:
       - name: Build and test
         run: bash ./mvnw -B clean verify
 
-
   deploy:
-    name: Deploy to server
+    name: Deploy API to server
     # Only on a real push to the working branch — never from a pull request,
     # which would let a fork's code reach the server.
     # Three guards, all required:
-    #  - never from a pull request, which would let a fork's code reach the server
+    #  - never from a pull request
     #  - only the working branch
     #  - DEPLOY_ENABLED must be set to 'true' as a repository variable
     #
     # The last one exists because a job whose labels match no runner does not
     # fail — it sits queued for up to 24 hours, leaving the whole run amber and
     # hiding a perfectly good build. Skipping is honest and visible.
-    # Turn it on once the self-hosted runner is registered:
-    #   Settings → Secrets and variables → Actions → Variables → DEPLOY_ENABLED = true
+    #
+    # ⚠️ No runner carries the `resibo-deploy` label today. The only runner on
+    # the server is registered to the gainsoclock repository with the label
+    # `gainsoclock-deploy`, so this job cannot run until a runner is
+    # registered for this repository. Until then, deploys are the manual
+    # procedure in resibo-plan.md §7.3.
     if: >-
       github.event_name != 'pull_request'
-      && github.ref == 'refs/heads/dev/api/resibo'
+      && github.ref == 'refs/heads/dev/resibo'
       && vars.DEPLOY_ENABLED == 'true'
     needs: build
     runs-on: [self-hosted, resibo-deploy]
