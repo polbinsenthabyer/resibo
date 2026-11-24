@@ -4,7 +4,6 @@ import com.api.resibo.configs.jwt.JwtAccessDeniedHandler;
 import com.api.resibo.configs.jwt.JwtAuthenticationEntryPoint;
 import com.api.resibo.configs.jwt.JwtFilter;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
@@ -15,13 +14,15 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.Arrays;
-import java.util.List;
-
+/**
+ * Authentication and authorisation: who may call what.
+ *
+ * <p>Which browser <em>origins</em> may call it is a separate question and
+ * lives in {@link CorsConfig}. The {@code .cors(...)} line below is the opt-in
+ * that makes Spring Security use the {@code CorsConfigurationSource} bean that
+ * class publishes.
+ */
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
@@ -35,50 +36,12 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    /**
-     * Which origins may call this API from a browser.
-     *
-     * Comma-separated, from CORS_ALLOWED_ORIGINS. Defaults to "*" so nothing
-     * is blocked while the frontend is being built. The React dev server runs
-     * on http://localhost:5173 and is covered either way.
-     *
-     * To lock it down, set the env var to the real origins, for example:
-     *   CORS_ALLOWED_ORIGINS=http://localhost:5173,https://resibo.example.com
-     */
-    @Value("${cors.allowed-origins}")
-    private String allowedOrigins;
-
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        List<String> origins = Arrays.stream(allowedOrigins.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isEmpty())
-                .toList();
-
-        // Browsers reject credentialed requests from a "*" origin, so only
-        // allow credentials once real origins are named. Resibo does not need
-        // them today — the token goes in the Authorization header, not a
-        // cookie — but this means switching to named origins does not quietly
-        // leave cookies broken later.
-        boolean wildcard = origins.contains("*");
-
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(origins);
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(!wildcard);
-        // Lets a browser read the header back on a cross-origin response.
-        config.setExposedHeaders(List.of("Authorization"));
-        config.setMaxAge(3600L);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
-    }
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
+                // Uses the CorsConfigurationSource bean from CorsConfig.
+                // Without this line that bean is ignored and no CORS headers
+                // are written at all.
                 .cors(Customizer.withDefaults())
                 // No session cookie exists for a CSRF attack to use, so this
                 // is safe to disable on a stateless token API.
