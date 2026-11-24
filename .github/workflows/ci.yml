@@ -48,6 +48,13 @@ jobs:
       DATABASE_USERNAME: root
       DATABASE_PASSWORD: test
       SERVER_PORT: '8080'
+      # jwt.secret has no default, so the Spring context will not start
+      # without this and every @SpringBootTest fails. Throwaway value for a
+      # throwaway job — it signs nothing that leaves this runner, and is
+      # deliberately not a GitHub Secret for the same reason as the database
+      # password above.
+      JWT_SECRET: ci-only-signing-key-not-used-anywhere-else-0123456789
+      JWT_EXPIRATION: '28800000'
 
     steps:
       - name: Get source code
