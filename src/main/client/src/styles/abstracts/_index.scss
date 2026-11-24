@@ -1,0 +1,7 @@
+// The single entry point for tokens and mixins.
+//
+// vite.config.ts injects `@use 'abstracts' as *` into every stylesheet, so
+// everything forwarded here is available in any .scss file with no import.
+// Add a new abstract by forwarding it from here.
+@forward 'variables';
+@forward 'mixins';

@@ -1,0 +1,10 @@
+// The global stylesheet, imported once by src/main.tsx.
+//
+// Global styles are limited to tokens, the reset and element defaults.
+// Everything that belongs to a component lives in that component's
+// *.module.scss, so a class can never leak out of the component that owns it.
+//
+// `abstracts` is NOT loaded here: vite.config.ts injects it into every
+// stylesheet already, and Sass rejects loading the same module twice.
+@use 'base/reset';
+@use 'base/typography';

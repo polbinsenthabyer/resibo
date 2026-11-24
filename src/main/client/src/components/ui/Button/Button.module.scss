@@ -1,0 +1,35 @@
+// `abstracts` (tokens + mixins) is injected by vite.config.ts — do not @use it
+// here, Sass rejects the same module being loaded twice in one file.
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+
+  @include focus-ring;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+}
+
+.primary {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+  color: var(--color-accent-contrast);
+}
+
+.danger {
+  border-color: var(--color-danger);
+  background-color: var(--color-danger);
+  color: var(--color-accent-contrast);
+}

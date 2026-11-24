@@ -1,0 +1,51 @@
+// A small, deliberate reset. Only rules that earn their place.
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  // Respects a user who has asked for less motion at the OS level.
+  @media (prefers-reduced-motion: reduce) {
+    scroll-behavior: auto;
+  }
+
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+img,
+picture,
+svg,
+video {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+// A POS runs long sessions on one screen; a stray horizontal scrollbar is a
+// usability bug, not a cosmetic one.
+body {
+  overflow-x: hidden;
+}

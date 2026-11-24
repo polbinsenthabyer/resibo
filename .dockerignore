@@ -15,6 +15,17 @@ secrets/
 target/
 build/
 
+# The React client (src/main/client) is built by its own toolchain, never by
+# the Java image. Excluded outright rather than only ignoring node_modules,
+# because the Dockerfile copies the whole of src/ and nothing under this
+# directory is an input to the Maven build.
+src/main/client/
+
+# Node, in case a frontend build context is ever added here.
+node_modules/
+dist/
+.vite/
+
 # Version control and CI
 .git/
 .github/

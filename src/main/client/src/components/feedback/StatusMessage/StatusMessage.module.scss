@@ -1,0 +1,27 @@
+.message {
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-surface-raised);
+  font-size: var(--font-size-sm);
+}
+
+.pending {
+  border-left-color: var(--color-text-muted);
+  color: var(--color-text-muted);
+}
+
+.success {
+  border-left-color: var(--color-success);
+}
+
+.failure {
+  border-left-color: var(--color-danger);
+}
+
+.code {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+}
