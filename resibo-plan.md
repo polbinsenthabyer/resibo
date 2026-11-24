@@ -66,7 +66,7 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.20 — role-based welcome pages, local sign-out, and persistent light/dark mode; scope still unfilled |
+| Document version | 0.21 — role welcome and theme deployment verified; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-24 |
 | Last updated by | Codex (frontend role routing, sign-out, and theme) |
@@ -1222,6 +1222,7 @@ browser-based visual check or successful login submission is claimed here.
 | Auth page deployment (`6187e06`) | [Client run 45369269628](https://github.com/polbinsenthabyer/resibo/actions/runs/45369269628) passed Build and Deploy. Public `/login` and `/signup` returned `200 text/html` and loaded the new JS bundle. Live JS and CSS SHA-256 hashes matched the local production build; the CSS contains two narrow-screen media blocks. API health stayed 200. |
 | Safe auth-controller rejection checks | A bogus login returned `ERROR/E0106`; a signup request with a blank username returned `ERROR/E0101`. No account was created. These verify the live endpoints and error envelope, not the rendered forms. |
 | Login and signup in a browser | **Not visually verified or submitted through a browser.** The page bundle and responsive CSS were verified by HTTP and hash comparison; no real account was created to exercise signup success. |
+| Role welcome and theme deployment (`4b99b08`) | [Client run 45370858224](https://github.com/polbinsenthabyer/resibo/actions/runs/45370858224) passed Build and Deploy. Public `/`, `/login`, `/signup`, `/admin`, `/employee`, and `/status` returned `200 text/html`; live JS and CSS SHA-256 matched the local production build. The JS contains the welcome text fragments, sign-out and storage markers, and the CSS contains dark theme tokens and two `width<=40rem` media rules. API health returned 200. HTTP verifies delivered assets and route fallback, **not** a successful login, client redirect, or rendered responsive layout. |
 
 ---
 
@@ -2345,3 +2346,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.18 | Added responsive login and signup pages to §5.6, recorded the development API default change and its shared-database caveat, and superseded the earlier read-only client status. Verification and CI deployment of the new forms remain pending. | Codex |
 | 2026-11-24 | 0.19 | Recorded client CI Build and Deploy success for `6187e06`, live auth route and bundle hash checks, narrow-screen CSS presence, safe API error responses, and the unverified browser submission limit. | Codex |
 | 2026-11-24 | 0.20 | Added role-based placeholder routes, local token clearing on sign-out, root redirect, status-page relocation, header without page links, and persistent light/dark mode to §5.6; recorded the client/server trust boundary and responsive intent. Deployment verification will be appended after CI. | Codex |
+| 2026-11-24 | 0.21 | Recorded local lint/build/format success, client CI Build and Deploy success for `4b99b08`, public route and bundle hash checks, dark theme/mobile CSS presence, and the browser verification limit. | Codex |
