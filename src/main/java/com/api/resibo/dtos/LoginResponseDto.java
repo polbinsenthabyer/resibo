@@ -7,9 +7,9 @@ import lombok.NoArgsConstructor;
 /**
  * What a successful login returns.
  *
- * <p>Carries the role so a frontend can decide what to render without
- * decoding the token. The token remains the only thing the server trusts —
- * a client editing this field changes nothing about what it may do.
+ * Includes the role so a frontend can decide what to show without decoding
+ * the token. The token is still the only thing the server trusts, so editing
+ * this field client-side changes nothing about what the caller may do.
  */
 @Data
 @NoArgsConstructor
@@ -18,6 +18,4 @@ public class LoginResponseDto {
     private String username;
     private String role;
     private String token;
-    /** Token lifetime in seconds, so a client can refresh before it expires. */
-    private long expiresInSeconds;
 }

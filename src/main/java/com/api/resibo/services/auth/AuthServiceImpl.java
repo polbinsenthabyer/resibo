@@ -15,7 +15,6 @@ import com.api.resibo.utilities.SecurityUtil;
 import com.api.resibo.utilities.UserUtility;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -33,9 +32,6 @@ public class AuthServiceImpl implements AuthService {
     private final UserUtility userUtility;
     private final SecurityUtil securityUtil;
     private final JwtUtil jwtUtil;
-
-    @Value("${jwt.expiration}")
-    private long jwtExpirationMillis;
 
     private static final int MIN_PASSWORD_LENGTH = 8;
 
@@ -139,7 +135,7 @@ public class AuthServiceImpl implements AuthService {
 
         String token = jwtUtil.generateToken(user.getUsername(), role.getRoleName());
         LoginResponseDto payload = new LoginResponseDto(
-                user.getUsername(), role.getRoleName(), token, jwtExpirationMillis / 1000);
+                user.getUsername(), role.getRoleName(), token);
 
         return ResponseUtility.getSuccessResponse(MessageType.SUCCESSFULLY_LOGGED_IN, payload);
     }
