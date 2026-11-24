@@ -35,6 +35,14 @@ export function HealthPage() {
         Check again
       </Button>
 
+      <img
+        className={styles.spongebob}
+        src="/spongebob.gif"
+        alt="SpongeBob dancing"
+        width="340"
+        height="200"
+      />
+
       <p className={styles.detail}>
         Calling <code>{env.apiBaseUrl}/health/check</code>
       </p>
