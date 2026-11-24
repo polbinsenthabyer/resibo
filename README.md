@@ -1,103 +1,30 @@
 # Resibo
 
-A point-of-sale application — Spring Boot, React, and MariaDB.
+Resibo is a point-of-sale application in development, built with Spring Boot, React, and MariaDB.
 
-> **Status: planning.** There is no application code in this repository yet.
-> Scope, architecture, and the data model are being settled in
-> [`resibo-plan.md`](resibo-plan.md) before anything is built. That document is
-> the project's source of truth; this README is the summary of it.
+The API is deployed at <https://resibo-api.polbinsenthabyer.uk>. It currently has JWT authentication, ADMIN and EMPLOYEE roles, and an admin-only product catalog. The React client at <https://resibo.polbinsenthabyer.uk> is a one-page API health screen. Checkout, sales, payments, receipts, shifts, and stock movement are not built yet.
 
----
+## Working branch
 
-## What Resibo is
+`main` contains this public summary only. The application, plan, and project instructions live together on [`dev/resibo`](https://github.com/polbinsenthabyer/resibo/tree/dev/resibo):
 
-Resibo is a POS system for ringing up sales, taking payment, issuing a receipt,
-and reconciling the till at the end of a shift — with the catalog, stock, and
-reporting behind it that make those things possible.
+- [`client/`](https://github.com/polbinsenthabyer/resibo/tree/dev/resibo/client) — React, Vite, TypeScript, and SCSS
+- [`server/`](https://github.com/polbinsenthabyer/resibo/tree/dev/resibo/server) — Spring Boot API and SQL table definitions
+- [`resibo-plan.md`](https://github.com/polbinsenthabyer/resibo/blob/dev/resibo/resibo-plan.md) — product scope, decisions, open questions, and delivery plan
 
-The specifics of *which* business it serves, and how far the first version
-reaches, are open questions recorded in the plan. They are deliberately not
-guessed at here: a POS for a cafe and a POS for a hardware store share a
-checkout screen and little else.
+The client and server have separate CI workflows and deployment targets. A client release does not redeploy the API.
 
-## Tech stack
-
-| Layer | Technology |
-|---|---|
-| Backend | Spring Boot (Java), structured as a **modular monolith** |
-| Frontend | React |
-| Database | MariaDB |
-| Hosting | To be decided — server and Cloudflare-managed domain |
-
-Supporting choices — build tooling, migrations, auth, test frameworks — are
-proposed with recommendations in [§5 of the plan](resibo-plan.md#5-tech-stack)
-and await sign-off.
-
-## Backend architecture
-
-One deployable Spring Boot application, divided internally into feature modules
-with enforced boundaries rather than a layer-first package tree.
-
-```
-backend/src/main/java/.../resibo/
-├── shared/      money, errors, audit, configuration
-└── modules/
-    ├── identity/      users, roles, permissions, tokens
-    ├── catalog/       products, variants, barcodes, prices, taxes
-    ├── pricing/       discounts and promotions
-    ├── sales/         ring up, tender, void, return, receipt numbering
-    ├── inventory/     stock movements, on-hand, counts
-    ├── cashdrawer/    shifts, cash movements, X and Z readings
-    ├── customers/     customers and credit accounts
-    ├── purchasing/    suppliers and purchase orders
-    └── reporting/     read-side queries
-```
-
-Each module keeps its entities and repositories private and exposes only an
-`api/` package of interfaces and DTOs. Modules do not read each other's tables.
-The full rules, and the open questions about how to enforce them, are in
-[§6.1 of the plan](resibo-plan.md#61-backend-structure--modular-monolith-decided).
-
-## Repository layout
-
-This repository keeps its branches deliberately separate:
-
-| Branch | Contents |
-|---|---|
-| `main` | This README, and nothing else. |
-| `dev/api/resibo` | Backend working branch — `resibo-plan.md` and, in time, the application. |
-
-The `api` segment distinguishes backend work from frontend work; a frontend
-branch would be `dev/app/resibo`.
-
-**The plan is not on `main`.** To read it:
+To inspect or run the current client from a checkout:
 
 ```sh
-git switch dev/api/resibo
+git switch dev/resibo
+cd client
+npm ci
+npm run dev
 ```
 
-Application code arrives once the plan's blocking questions are answered.
+The development client calls the deployed API by default. The project plan records the unresolved choices that affect checkout and receipts, including offline behavior, tax, permissions, and official-receipt requirements.
 
-## Getting started
+## Credentials
 
-Not yet applicable — there is nothing to build or run. Setup instructions will
-be written alongside the first working skeleton, and will cover the JDK and Node
-versions, starting MariaDB, applying migrations, and running the two halves
-locally.
-
-## Configuration and secrets
-
-No credential value belongs in this repository, in its history, or in its
-documentation. The backend will read every secret from environment variables; a
-committed `.env.example` will list the required variable **names** with empty
-values. Real values live outside the repository.
-
-See [§8 of the plan](resibo-plan.md#8-credentials-and-secrets) for the full
-handling rules and the inventory of credentials the project needs.
-
-## Contributing
-
-Any change that alters behaviour, scope, schema, stack, or deployment updates
-`resibo-plan.md` in the same change. The plan is not a historical artifact of
-the kickoff — it is the current description of the system, and it is expected to
-stay accurate.
+Do not commit credentials or put them in documentation. The working branch has names-only environment templates; real values belong outside the repository.
