@@ -2,17 +2,15 @@
 
 A point-of-sale application — Spring Boot, React, and MariaDB.
 
-> **Status: planning, with a deployed skeleton.** The backend builds, runs,
-> answers a health check, and connects to MariaDB — and that is all it does. It
-> is deployed and publicly reachable at
-> **<https://resibo-api.polbinsenthabyer.uk>**, which proves the road to
-> production works and nothing about the product. The database connection is
-> likewise plumbing, not persistence: there are **no entities, no repositories,
-> no schema and no migrations**, so the application connects to an empty
-> database and reads and writes nothing. There is no authentication and no
-> frontend. Scope, the data model, and the architecture are still being settled
-> in [`resibo-plan.md`](resibo-plan.md) before the rest is built. That document
-> is the project's source of truth; this README is the summary of it.
+> **Status: planning, with a deployed API that has login and a product table.**
+> The backend builds, runs, and is publicly reachable at
+> **<https://resibo-api.polbinsenthabyer.uk>**. It has **JWT authentication**
+> with two roles, three tables in MariaDB, and an admin-only product catalog.
+> That is all it does. There is **no checkout, no sale, no receipt, no payment,
+> no shift, no stock movement and no frontend** — so there is no POS yet. Scope,
+> the data model, and the architecture are still being settled in
+> [`resibo-plan.md`](resibo-plan.md) before the rest is built. That document is
+> the project's source of truth; this README is the summary of it.
 
 ---
 
@@ -33,17 +31,20 @@ checkout screen and little else.
 |---|---|
 | Backend | Spring Boot 4.2.0 on Java 17, built with Maven, packaged as a `jar` |
 | Frontend | React — not started |
-| Database | MariaDB — connected via Spring Data JPA, with **no schema and no entities yet** |
+| Database | MariaDB via Spring Data JPA — three tables: `product`, `user_role`, `user` |
+| Auth | Spring Security with a stateless JWT, HS256, 8-hour token |
 | Hosting | Docker on a self-hosted Ubuntu server, reverse-proxied by nginx, fronted by a Cloudflare tunnel |
 
-The backend's dependencies today are deliberately few: `webmvc`, Actuator,
-Lombok, DevTools, the matching test starters, and — since the database
-integration — Spring Data JPA with the MariaDB driver at `runtime` scope. No
-migrations tool and no security starter are in the build yet, because the
-decisions they would encode are still open.
+The backend's dependencies: `webmvc`, Actuator, Lombok, DevTools, Spring Data
+JPA with the MariaDB driver at `runtime` scope, Spring Security, and `jjwt` at
+**0.13.0** — pinned by a `jjwt.version` property, and deliberately not the
+0.11.5 the sibling project `gainsoclock` uses, because the builder and parser
+API differs between the two. Four test starters go with them. **No migrations
+tool is in the build**, which is now a gap rather than an absence: three tables
+exist and nothing tracks which environment has them.
 
-The remaining choices — migrations, auth, frontend tooling, test frameworks —
-are proposed with recommendations in
+The remaining choices — migrations, frontend tooling, test frameworks — are
+proposed with recommendations in
 [§5 of the plan](resibo-plan.md#5-tech-stack) and await sign-off.
 
 ## The database connection
@@ -67,9 +68,18 @@ Three things about it are deliberate, and two of them are rules:
 - `spring.jpa.open-in-view` is `false`, keeping the persistence context out of
   the view layer.
 
-**None of this is persistence.** The schema holds zero tables, nothing maps to
-it, and no request touches it. See
-[§5.3 of the plan](resibo-plan.md#53-the-database-connection-2026-11-24).
+The schema holds three tables — `product`, `user_role` and `user`. Each was
+created from a reviewed file in [`sql/`](sql/README.md), applied by hand with
+the administrative account. **Nothing tracks which environment has which file**,
+and there is no tool for altering an existing table. See
+[§5.3](resibo-plan.md#53-the-database-connection-2026-11-24) and
+[§5.4](resibo-plan.md#54-authentication-and-security-2026-11-24) of the plan.
+
+One rule for anyone writing a repository: **every query is native SQL**, on the
+owner's instruction. That carries consequences — a paginated query needs its own
+`countQuery`, a `Sort` must carry column names rather than entity field names,
+and `SELECT EXISTS(...)` returns an `Integer` and not a `Boolean`. All three are
+written up in [§5.5 of the plan](resibo-plan.md#55-repositories-are-native-sql-2026-11-24).
 
 ## Backend architecture
 
@@ -80,30 +90,104 @@ sibling project `gainsoclock` that Resibo takes its conventions from:
 ```
 src/main/java/com/api/resibo/
 ├── ResiboApplication.java
-├── controllers/     HealthController
-├── dtos/            ResponseDto — the single response envelope
-├── types/           ResponseType
-└── utilities/       MessageType, ResponseUtility
+├── configs/         SecurityConfig, and jwt/ for the filter, util and handlers
+├── controllers/     AuthController, HealthController, and admin/ for admin-only
+├── dtos/            ResponseDto — the single response envelope — and the rest
+├── entities/        Product, User, UserRole
+├── repositories/    one Spring Data interface per entity
+├── services/        auth/ and product/, each an interface plus an *Impl
+├── types/           ResponseType, UserRoleType
+└── utilities/       MessageType, ResponseUtility, SecurityUtil, UserUtility
 ```
-
-`entities/`, `repositories/` and `services/` join them, flat, when the first
-feature needs them.
 
 Every endpoint returns the same envelope — `responseType`, `code`, `data`,
 `message`, `className`, `methodName`, `responseTime` — built through
 `ResponseUtility`'s static factories rather than assembled at the call site.
 
-Two endpoints exist:
+Naming rule: an admin-only controller is `Admin<Name>Controller` and lives in
+`controllers/admin/`, so the class name and the `/api/admin/**` path agree.
 
-| Endpoint | Purpose |
-|---|---|
-| `GET /api/health/check` | The application's own health check; returns the standard envelope, proving the request path and the envelope both work |
-| `GET /actuator/health` | Spring Boot Actuator, for infrastructure probes |
+Eight endpoints exist. The "Who" column is enforced in `SecurityConfig`, not by
+annotations on the controllers:
+
+| Endpoint | Who | Purpose |
+|---|---|---|
+| `GET /api/health/check` | anyone | The application's own health check, returning the standard envelope |
+| `GET /actuator/health` | anyone | Spring Boot Actuator, for infrastructure probes |
+| `POST /api/auth/signup` | anyone | Register an account — read the warning below first |
+| `POST /api/auth/login` | anyone | Exchange username and password for a token |
+| `POST /api/admin/products/set` | ADMIN | Create when the payload has no `id`, update when it does |
+| `POST /api/admin/products/list` | ADMIN | Filtered, sorted, paginated listing |
+| `GET /api/admin/products/get/{productId}` | ADMIN | One product |
+| `DELETE /api/admin/products/delete/{productId}` | ADMIN | Delete one product |
+
+The listing is a `POST` despite being a read: its filter and pagination payload
+belongs in a request body, and a `GET` body is not reliably carried by proxies,
+browsers and HTTP clients.
 
 An earlier decision called for a modular monolith packaged by feature instead.
 That structure is **not** what the code is, and the plan now records why, what
 the layer-first choice costs, and that it is awaiting the owner's confirmation —
 see [§6.1 of the plan](resibo-plan.md#61-backend-structure--layer-first-in-the-code-modular-monolith-deferred).
+
+## Authentication
+
+Stateless JWT. Log in, get a token, send it on every later call:
+
+```sh
+# 1. log in
+curl -X POST https://resibo-api.polbinsenthabyer.uk/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"...","password":"..."}'
+
+# 2. use the token it returns
+curl https://resibo-api.polbinsenthabyer.uk/api/admin/products/get/1 \
+  -H 'Authorization: Bearer <token>'
+```
+
+Login returns `username`, `role` and `token`. Tokens are
+HS256 and last **8 hours** — roughly one shift on a till. There is no refresh
+token, no logout and no revocation: a token is valid until it expires.
+
+Who can reach what:
+
+| Path | Who |
+|---|---|
+| `/api/auth/**`, `/api/health/**`, `/actuator/**`, `/error`, `OPTIONS /**` | anyone |
+| `/api/admin/**` | ADMIN |
+| `/api/employee/**` | ADMIN or EMPLOYEE |
+| **everything else** | **any authenticated user** |
+
+That last row is deliberate: the filter chain ends in
+`anyRequest().authenticated()`, so a new controller is protected the moment it
+exists and nobody has to remember to add a rule.
+
+Two roles exist, `ADMIN` and `EMPLOYEE`. They are a working minimum, not an
+answer to the plan's unanswered question about who uses Resibo.
+
+**Errors.** Only two responses use a real HTTP error status — `401` with code
+`E0401` for a missing, malformed or expired token, and `403` with `E0403` for a
+valid token whose role is not allowed. Every other error is still `200` with an
+error code in the envelope. Login and signup failures use `E0101`–`E0106`;
+notably **`E0106` covers unknown username, wrong password and disabled account
+alike**, with an identical message, so the endpoint cannot be used to find out
+which usernames are real.
+
+**CORS** is open to all origins so frontend work is not blocked, with
+`allowCredentials=false` — browsers reject credentials from a `*` origin, and
+the token travels in a header rather than a cookie. It needs replacing with
+real origins before this API holds live data.
+
+> ⚠️ **Signup is public, and the first account on an empty system becomes
+> ADMIN.** After that an anonymous signup is always EMPLOYEE, whatever role it
+> asks for, and only an authenticated ADMIN can create another ADMIN. So on a
+> fresh environment there is a window in which whoever signs up first takes the
+> administrator account. **Create the admin account immediately after applying
+> the schema.** This is a known open exposure, not a finished design — see
+> [§8.1 of the plan](resibo-plan.md#81-outstanding-security-risks).
+
+The full detail is in
+[§5.4 of the plan](resibo-plan.md#54-authentication-and-security-2026-11-24).
 
 ## Repository layout
 
@@ -161,12 +245,15 @@ java -jar target/resibo-0.0.1-SNAPSHOT.jar    # or the built jar, either shell
 
 It listens on port 8080 unless `SERVER_PORT` says otherwise; the project's own
 `.env.dev` sets **8083**, matching the host port the deployed container uses, so
-a local URL and a deployed one mean the same thing. Two endpoints answer:
+a local URL and a deployed one mean the same thing. These two answer without a
+token:
 
 ```sh
 curl http://localhost:8083/api/health/check     # 8080 if SERVER_PORT is unset
 curl http://localhost:8083/actuator/health
 ```
+
+Everything else needs one — see [Authentication](#authentication).
 
 If you have Docker and would rather not deal with `JAVA_HOME` at all, the same
 image that runs in production builds and runs locally — it brings its own JDK:
@@ -182,9 +269,34 @@ committed `.env.example`, which carries variable names and no values.
 **You do need a MariaDB now.** The datasource properties have no defaults, so
 `DATASOURCE_URL`, `DATABASE_USERNAME` and `DATABASE_PASSWORD` must be set — in
 `.env.dev` or in the environment — or the application fails to start, on
-purpose. That applies to `./mvnw verify` as well as to running it: one of the
-two tests starts the Spring context, so **the test suite needs a reachable
-database too**.
+purpose. That applies to `./mvnw verify` as well as to running it: one test
+starts the Spring context, so **the test suite needs a reachable database too**.
+
+**You also need `JWT_SECRET`, and it must be at least 32 characters.** It has no
+default either — a fallback signing key in a public repository would be no
+secret at all — and `JwtUtil` checks the length at startup, so a short one fails
+the boot rather than the first login. `JWT_EXPIRATION` is optional and defaults
+to 8 hours in milliseconds. Use a different value locally from the one
+production uses, so a token minted here is worthless there.
+
+> Note: the committed `.env.example` does **not** yet list `JWT_SECRET` or
+> `JWT_EXPIRATION`, so copying the template alone is not enough to start the
+> application. Add them by hand. Tracked in
+> [§12 of the plan](resibo-plan.md#12-open-questions).
+
+The tables have to exist before anything but the health endpoints works. Apply
+them in order, with the administrative database account — `user_role` first,
+because `user` has a foreign key to it:
+
+```sh
+mariadb -h <host> -u <admin-user> -p resibo < sql/tables/user_role.sql
+mariadb -h <host> -u <admin-user> -p resibo < sql/tables/user.sql
+mariadb -h <host> -u <admin-user> -p resibo < sql/tables/product.sql
+```
+
+Then create the admin account straight away, before anyone else can: the first
+signup on an empty `user` table becomes ADMIN. See
+[Authentication](#authentication).
 
 A caution that belongs here rather than in the plan's small print: the
 `.env.dev` used while this was built points at the **shared server instance**,
@@ -194,9 +306,9 @@ MariaDB — or at Testcontainers — is the open item in
 [§12 of the plan](resibo-plan.md#12-open-questions); until it is closed, know
 what your `DATASOURCE_URL` is aimed at before you run a test that writes.
 
-Nothing creates tables: `ddl-auto` is `none` and there are no migrations yet.
-Instructions for the schema, migrations, and the frontend follow the decisions
-that produce them.
+The application never creates a table: `ddl-auto` is `none` and there is no
+migration tool. The files in [`sql/`](sql/README.md) are the authority for what
+the schema should be, and applying them is a deliberate manual step.
 
 ## Deployment
 
@@ -206,7 +318,7 @@ reverse-proxied by the host's nginx and published through a Cloudflare tunnel.
 | | |
 |---|---|
 | Public URL | <https://resibo-api.polbinsenthabyer.uk> |
-| What it serves | `GET /api/health/check` and `GET /actuator/health` — **nothing else** |
+| What it serves | The eight endpoints above — health, auth, and admin-only products. **Nothing else** |
 | Runtime | Docker container, `restart: unless-stopped`, published on the host's loopback interface only |
 | TLS | Terminated by Cloudflare. The tunnel carries the request to the origin, so the origin holds no certificate and listens on plain HTTP on loopback. |
 
@@ -214,10 +326,11 @@ reverse-proxied by the host's nginx and published through a Cloudflare tunnel.
 curl https://resibo-api.polbinsenthabyer.uk/api/health/check
 ```
 
-> **"Deployed" does not mean "working POS".** The live application connects to
-> its database and holds an idle connection pool against an **empty schema** —
-> no tables, no entities, no migrations. It answers health checks, and every
-> question about what Resibo actually does is still open in the plan.
+> **"Deployed" does not mean "working POS".** The live application can
+> authenticate a user and manage a list of products. It cannot ring up a sale,
+> take a payment, print a receipt, open a shift or move stock, and there is no
+> frontend. Every question about what Resibo actually does is still open in the
+> plan.
 
 Deploying is manual, from a git checkout on the server:
 
@@ -259,6 +372,12 @@ repository — on the server, in a `0600` env file outside the checkout.
 The database credential that file holds belongs to a **least-privilege account
 scoped to the `resibo` schema**, not to the instance superuser, so a compromise
 of the application cannot reach the unrelated projects that share the server.
+
+The same file holds `JWT_SECRET`, the key the API signs its tokens with. It is
+referred to by name only, here and in the plan. **Local and production use
+different values on purpose**, so a token minted on a developer's machine cannot
+be used against production. Rotating it invalidates every token in circulation,
+which is the intended behaviour.
 
 One apparent exception, which is not one: the MariaDB credentials in the CI
 workflow are in plain sight deliberately. They belong to a container created for

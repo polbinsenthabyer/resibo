@@ -5,25 +5,23 @@
 > disagree, one of them is a bug: either the code drifted, or this file went
 > stale and must be corrected in the same change that revealed it.
 
-**Status: planning, with a deployed skeleton that now reaches its database.** A
-buildable Spring Boot application exists — scaffold, response envelope, health
-endpoint, green tests (§5.1) — it is deployed, running on the server in Docker
-behind the host's nginx, fronted by the Cloudflare tunnel that already serves
-the sibling projects, answering on `https://resibo-api.polbinsenthabyer.uk`
-(§7.3), and as of 2026-11-24 it **connects to MariaDB** as a dedicated
-least-privilege account, with Hibernate forbidden from touching the schema
-(§5.3).
+**Status: planning, with a deployed API that now has login and a product
+table.** A Spring Boot application runs on the server in Docker behind the
+host's nginx, fronted by the Cloudflare tunnel that already serves the sibling
+projects, answering on `https://resibo-api.polbinsenthabyer.uk` (§7.3). It
+connects to MariaDB as a dedicated least-privilege account, with Hibernate
+forbidden from touching the schema (§5.3). Since 2026-11-24 it also has **JWT
+authentication with two roles** (§5.4), three tables, and an admin-only product
+catalog.
 
-**Read both "deployed" and "connected" narrowly.** What is live serves the two
-health endpoints and nothing else. The schema it connects to is **empty**:
-there are **no entities, no repositories, no tables and no migrations**, so
-nothing is read and nothing is written. "Connected to the database" is a
-plumbing milestone, not persistence, and must never be reported as the latter.
-**Every `[BLOCKER]` item below is still unanswered, and nothing that depends on
-one should be written until it is.** A deployed skeleton with a live connection
-pool unblocks none of them; it only means that when there is something to ship,
-the road to the public internet and the road to the data are both built and
-tested.
+**Read that narrowly.** What exists is a way to log in and a list of products.
+There is no checkout, no sale, no receipt, no payment, no shift, no stock
+movement and no frontend — so there is no POS. **Every `[BLOCKER]` item below is
+still unanswered, and nothing that depends on one should be written until it
+is.** The two roles are a working minimum, not the answer to §1.3. The
+`product` table is a name, a price and a stock count, not the §4 domain model.
+And signup is still public, so on a fresh environment whoever signs up first
+becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 ---
 
@@ -69,14 +67,14 @@ tested.
 
 | Field | Value |
 |---|---|
-| Document version | 0.7 — database connection recorded; scope still unfilled |
+| Document version | 0.8 — authentication recorded; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-24 |
-| Last updated by | Claude (recorded the JPA datasource, the least-privilege database account, and the CI service container) |
-| Plan status | **AWAITING OWNER INPUT** — the skeleton is deployed, publicly reachable (§7.3) and now connected to MariaDB (§5.3), but it serves health endpoints only against an empty schema, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
+| Last updated by | Claude (recorded JWT authentication, the `user` and `user_role` tables, and the move of products behind ADMIN) |
+| Plan status | **AWAITING OWNER INPUT** — the API is deployed, publicly reachable (§7.3), authenticated (§5.4) and serves an admin-only product catalog, but there is no checkout and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
 | Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
-| Production URL | `https://resibo-api.polbinsenthabyer.uk` — health endpoints only; see §7.3 |
+| Production URL | `https://resibo-api.polbinsenthabyer.uk` — health, auth, and admin-only products; see §7.3 |
 | This document lives on | branch `dev/api/resibo` — see §7.1 |
 | Vault notes | `Obsidian Vault/Projects/personal/resibo/` |
 
@@ -336,6 +334,13 @@ wrong or missing; the names matter less than the shapes.
 | `ReceiptSequence` | Per-terminal counter that only moves forward | Never reset |
 | `AuditEvent` | Who did what, when, from where | Append-only |
 
+**Three of these rows now exist in the database, ahead of this section being
+answered** (§5.4): `product` as a name, description, price and stock count, and
+`User` plus `Role` as the `user` and `user_role` tables with two roles. They are
+a working minimum built to get authentication and a catalog moving, not a
+verdict on this table — no `ProductVariant`, no `Barcode`, no `PriceList`, no
+`Permission`. Treat the table below as still open, including for those three.
+
 **Two rules I propose, which are hard to add later:**
 
 1. **Sales are append-only.** A completed sale is never updated or deleted. A
@@ -373,19 +378,20 @@ a choice has been made in code, and says **open** where nothing has been chosen.
 | Boilerplate | Lombok, per §6.1.2 | **Lombok — in use**, `optional` scope. |
 | Runtime probes | Spring Boot Actuator | **Actuator — in use**; `health` and `info` exposed, details only `when-authorized`. |
 | Local restart | Spring Boot DevTools | **DevTools — in use**, `runtime` and `optional`. |
-| API style | REST + JSON | REST + JSON **as built** — though only one endpoint exists, so this is cheap to revisit. |
-| API docs | OpenAPI generated from the controllers | **Open** — no OpenAPI dependency in the pom. |
-| DB migrations | Flyway, versioned SQL committed to the repo | **Open, and now the gap that matters** — no Flyway in the pom and no migrations, while `ddl-auto: none` means Hibernate will not create a table either. The schema has no owner yet; §12 #15. |
-| Persistence | Spring Data JPA, with plain SQL where reporting needs it | **Spring Data JPA — in use** (§5.3), with the MariaDB driver at `runtime` scope. The application connects to the `resibo` schema as a dedicated least-privilege account. **There are still no entities and no repositories**, so JPA manages nothing yet; the connection pool is real, the persistence is not. |
-| Auth | Short-lived JWT access token + refresh; roles from §1.3 | **Open** — no Spring Security; the health endpoint is unauthenticated. Blocked on §1.3. |
+| API style | REST + JSON | REST + JSON **as built** — eight endpoints (§5.1), with a bearer token in the `Authorization` header. The product listing is a `POST` despite being a read, which is a deliberate choice explained in §5.1. |
+| API docs | OpenAPI generated from the controllers | **Open** — no OpenAPI dependency in the pom. It costs more than it did: there are now eight endpoints, four of which need a token. |
+| DB migrations | Flyway, versioned SQL committed to the repo | **Open, and the gap is no longer theoretical** — no Flyway in the pom and no migrations, while `ddl-auto: none` means Hibernate will not create a table either. **Three tables now exist** (`product`, `user_role`, `user`), applied by hand from `sql/tables/`, and nothing records which environment has which. §12 #15. |
+| Persistence | Spring Data JPA, with plain SQL where reporting needs it | **Spring Data JPA — in use** (§5.3), with the MariaDB driver at `runtime` scope. Three entities and three repositories now exist, and on the owner's instruction **every repository query is native SQL** — see §5.5 for the two rules that follow from that. |
+| Auth | Short-lived JWT access token + refresh; roles from §1.3 | **JWT — in use** (§5.4). Spring Security, HS256, an 8-hour token, two roles (ADMIN, EMPLOYEE), and default-deny on any endpoint without an explicit rule. **No refresh token, no logout and no revocation** (§12 #18). The two roles are a working minimum, not an answer to §1.3. |
+| Password hashing | BCrypt | **BCrypt — in use** (§5.4), `BCryptPasswordEncoder` at its default strength. The `password` column holds a hash and never a plaintext password. |
 | Frontend build | Vite | **Open** — no frontend code exists. |
 | Frontend language | TypeScript | **Open** |
 | Server state | TanStack Query | **Open** |
 | UI components | shadcn/ui on Tailwind | **Open** |
 | Routing | React Router | **Open** |
-| Backend tests | JUnit 5 + Testcontainers against real MariaDB | **JUnit 5 in use** (`spring-boot-starter-webmvc-test`, `spring-boot-starter-actuator-test`, `spring-boot-starter-data-jpa-test`). **Testcontainers still open — and it stopped being academic**: the context test now needs a datasource, CI supplies a throwaway one (§5.3), but a local `mvnw verify` loads `.env.dev` and therefore connects to the **shared production database**. §12 #13. |
+| Backend tests | JUnit 5 + Testcontainers against real MariaDB | **JUnit 5 in use** (`spring-boot-starter-webmvc-test`, `spring-boot-starter-actuator-test`, `spring-boot-starter-data-jpa-test`, `spring-boot-starter-security-test`), **22 tests** as of 2026-11-24. **Testcontainers still open — and it stopped being academic**: the context test now needs a datasource, CI supplies a throwaway one (§5.3), but a local `mvnw verify` loads `.env.dev` and therefore connects to the **shared production database**, which now has real rows in it. §12 #13. |
 | Frontend tests | Vitest + React Testing Library; Playwright for checkout | **Open** |
-| Local database | Docker Compose for MariaDB | **Decided by default, and not well.** `.env.dev` points local runs *and local tests* at the shared MariaDB on the server, because that is the database that exists. A local container or Testcontainers would isolate it; neither is in place. §12 #13. |
+| Local database | Docker Compose for MariaDB | **Decided by default, and not well.** `.env.dev` points local runs *and local tests* at the shared MariaDB on the server, because that is the database that exists. A local container or Testcontainers would isolate it; neither is in place. **That schema is no longer empty**, so this has stopped being harmless. §12 #13. |
 | Repo layout | One repo: `backend/` and `frontend/` | **Diverged.** The backend was scaffolded at the **repository root** — `pom.xml` and `src/` are top-level, there is no `backend/`. Where the frontend lives is therefore open again; see §5.1. |
 
 **Accept all recommendations, or state your changes:**
@@ -412,8 +418,9 @@ two traps below.
 | Spring Boot | 4.2.0 |
 | Build tool / packaging | Maven / `jar` |
 
-Dependencies, exactly as they stand in `pom.xml` — the bottom three were added
-on 2026-11-24 for the database connection (§5.3):
+Dependencies, exactly as they stand in `pom.xml`. The three JPA and driver rows
+were added on 2026-11-24 for the database connection (§5.3); the five security
+and JWT rows later the same day for authentication (§5.4):
 
 | Dependency | Scope | Why it is there |
 |---|---|---|
@@ -425,7 +432,19 @@ on 2026-11-24 for the database connection (§5.3):
 | `spring-boot-starter-actuator-test` | `test` | Actuator slice |
 | `spring-boot-starter-data-jpa` | compile | Hibernate, Spring Data, the transaction manager and HikariCP — the persistence layer §5 chose (§5.3) |
 | `mariadb-java-client` | `runtime` | The JDBC driver. **`runtime`, not compile: nothing in the source imports it**, so the compiler has no business seeing it. |
-| `spring-boot-starter-data-jpa-test` | `test` | The JPA test slice, so repository tests do not need the full context when there are repositories to test |
+| `spring-boot-starter-data-jpa-test` | `test` | The JPA test slice, so repository tests do not need the full context |
+| `spring-boot-starter-security` | compile | The filter chain, the authorisation rules and `BCryptPasswordEncoder` (§5.4) |
+| `jjwt-api` | compile | The JWT API. Version pinned by a `jjwt.version` property |
+| `jjwt-impl` | `runtime` | jjwt implementation. `runtime` because nothing compiles against it |
+| `jjwt-jackson` | `runtime` | jjwt's JSON serialisation |
+| `spring-boot-starter-security-test` | `test` | Security-aware slice tests |
+
+**jjwt is pinned at 0.13.0, and that is deliberate — gainsoclock uses 0.11.5.**
+0.11's builder and parser calls are deprecated, and there is no reason to start
+new code on them. The consequence is practical: **JWT code cannot be copied
+between the two projects.** 0.13 writes
+`Jwts.builder().subject(...).expiration(...)` and
+`Jwts.parser().verifyWith(key).build().parseSignedClaims(...)`; 0.11 does not.
 
 **The artifact ids were taken from Spring Initializr for Boot 4.2.0, not from
 memory.** Boot 4 renamed starters (`web` → `webmvc`, and the `*-test` starters
@@ -470,7 +489,10 @@ Note the paths: the backend sits at the repository root, not under `backend/` as
 §5 proposed. Nothing depends on that yet, but it reopens the question of where a
 frontend would live.
 
-`application.yaml` holds six things and no secrets: the application name
+That list is the scaffold as generated, not the tree as it stands — §6.1 has the
+current one.
+
+`application.yaml` holds seven things and no secrets: the application name
 (`resibo`); `spring.config.import:
 optional:file:.env.${APP_ENV:dev}[.properties]`, which loads a per-environment
 env file from the working directory — `APP_ENV` picks it, `dev` by default, and
@@ -483,24 +505,54 @@ default; the actuator exposure
 `management.endpoint.health.show-details: when-authorized`, so an anonymous
 caller learns liveness and nothing else — it now also reports database
 reachability, so hiding the details from anonymous callers matters more than it
-did); and `logging.level.com.api.resibo: INFO`.
+did); the **`jwt` block** added on 2026-11-24, `secret: ${JWT_SECRET}` with no
+default and `expiration: ${JWT_EXPIRATION:28800000}` (§5.4); and
+`logging.level.com.api.resibo: INFO`.
 
 The env files that go with it: **`.env.example` is committed and carries names
 only**, as §8 promised; `.env.dev`, `.env.prelive` and `.env.prod` are
 git-ignored. They are parsed as a `.properties` file, which is a real
 constraint worth remembering — no `export`, no shell expansion, no quotes
-around values. **This has stopped being a file of harmless values.** The five
+around values. **This has stopped being a file of harmless values.** The seven
 keys are `SERVER_PORT`, `DATASOURCE_URL`, `DATABASE_USERNAME`,
-`DATABASE_PASSWORD` and `DB_POOL_MAX`, the datasource keys are no longer
-commented out, and `DATABASE_PASSWORD` is a real credential — so `.env.dev` is
-now exactly the kind of file the §8 rules exist for.
+`DATABASE_PASSWORD`, `DB_POOL_MAX`, `JWT_SECRET` and `JWT_EXPIRATION`; the
+datasource keys are no longer commented out, and `DATABASE_PASSWORD` and
+`JWT_SECRET` are both real credentials — so `.env.dev` is now exactly the kind
+of file the §8 rules exist for.
 
-**The API surface, such as it is.** `HealthController` carries
-`@RequestMapping("api/health")` and `@GetMapping("/check")` — so `GET
-/api/health/check`, returning the standard envelope. gainsoclock also exposes a
-`/check/prelive` variant; it was deliberately left out, because no prelive
-environment has been decided for Resibo (§7). It costs one method to add when
-one exists.
+✅ **Fixed in `0135659`** — `.env.example` now lists all seven keys, and the CI
+job sets `JWT_SECRET`. The paragraph below records why it mattered.
+
+~~**`.env.example` lists only the first five keys.**~~ `JWT_SECRET` has no
+default, so a fresh checkout that copies the template cannot start the
+application. The CI `build` job has the same hole — it sets the datasource keys
+and no `JWT_SECRET`, while `ResiboApplicationTests` starts the full context.
+Recorded as §12 #20; both files are outside the documentation change that found
+it.
+
+**The API surface, in full.** Eight endpoints. All return the standard envelope
+except `/actuator/health`, which returns Actuator's own shape. The "who" column
+is enforced by `SecurityConfig` (§5.4), not by annotations on the controllers.
+
+| Endpoint | Who | Purpose |
+|---|---|---|
+| `GET /api/health/check` | anyone | The application's own health check |
+| `GET /actuator/health` | anyone | Actuator, for infrastructure probes |
+| `POST /api/auth/signup` | anyone | Register an account — see the bootstrap warning in §5.4 |
+| `POST /api/auth/login` | anyone | Exchange username and password for a token |
+| `POST /api/admin/products/set` | ADMIN | Create when the payload has no id, update when it does |
+| `POST /api/admin/products/list` | ADMIN | Filtered, sorted, paginated listing |
+| `GET /api/admin/products/get/{productId}` | ADMIN | One product |
+| `DELETE /api/admin/products/delete/{productId}` | ADMIN | Delete one product |
+
+The listing is a `POST` despite being a read: the filter and pagination payload
+belongs in a request body, and a `GET` body is not reliably carried by proxies,
+browsers and HTTP clients. gainsoclock pairs `GET` with `@RequestBody`, which
+works until something in the path drops it.
+
+gainsoclock also exposes a `/check/prelive` variant of the health endpoint; it
+was deliberately left out, because no prelive environment has been decided for
+Resibo (§7). It costs one method to add when one exists.
 
 **Toolchain on this machine — the build will not run without this.** No JDK is
 on `PATH` and `JAVA_HOME` is unset. Maven is not installed either, which is why
@@ -583,9 +635,12 @@ people, which is why it gets its own section rather than a row in a table.
 **What it is, in one line:** the application opens a HikariCP pool to the
 `resibo` schema on the shared MariaDB instance (§7.2), as a dedicated
 least-privilege account, with Hibernate forbidden from issuing a single DDL
-statement. **What it is not:** persistence. There are no entities, no
-repositories, no tables and no migrations — the pool connects to an empty
-schema and the application still serves only health endpoints.
+statement. **What it was not, when this section was written:** persistence —
+there were no entities, no repositories and no tables, and the pool connected to
+an empty schema. That changed later the same day: §5.4 added three tables and
+three entities. Everything below about the pool, the account and `ddl-auto`
+still holds exactly as written; **it is Hibernate that is forbidden from
+creating a table, not the project.**
 
 #### The datasource block
 
@@ -639,9 +694,11 @@ is the one that matters:
 > sales table to match a changed entity. If a schema change is needed, write it
 > as SQL, review it, and run it deliberately (§12 #15).
 
-Verified rather than trusted: **zero DDL statements appear in the application
-log, and the `resibo` schema still contains zero tables after the application
-has run** — locally and on the server.
+Verified rather than trusted, on 2026-11-24 before any table existed: **zero
+DDL statements appeared in the application log, and the `resibo` schema still
+held zero tables after the application had run** — locally and on the server.
+The three tables it holds now were each applied by hand from `sql/tables/`, not
+by Hibernate.
 
 #### Environment keys
 
@@ -722,11 +779,11 @@ The §8 rule is about credential **values that grant access to something that
 outlives the job** — this is not one.
 
 **A local `mvnw verify` has no such isolation.** It loads `.env.dev`, so it
-connects to the shared production database. Nothing writes today, because there
-are no entities, but that is a property of the code being empty rather than of
-the setup being safe. §5 already recommended Testcontainers; this is what makes
-it concrete, and it is recorded as an open question (§12 #13) rather than a
-footnote.
+connects to the shared production database. When this was written nothing could
+write, because there were no entities — a property of the code being empty
+rather than of the setup being safe. **That protection is gone**: there are now
+three entities and real rows in that schema. §5 already recommended
+Testcontainers; recorded as an open question (§12 #13) rather than a footnote.
 
 #### Verified, not assumed (2026-11-24)
 
@@ -734,10 +791,275 @@ footnote.
 |---|---|
 | Local `./mvnw -B clean verify` | **BUILD SUCCESS**, 2/2 tests. Hikari connected; the log reports `Database dialect: MariaDBDialect` |
 | `GET /actuator/health` with details | `db: {status: UP, database: MariaDB, validationQuery: isValid()}` |
-| DDL issued by the application | **None.** Zero DDL statements in the log, and the `resibo` schema still holds **0 tables** after a run — `ddl-auto: none` proven, not assumed |
+| DDL issued by the application | **None.** Zero DDL statements in the log, and the `resibo` schema still held **0 tables** after a run — `ddl-auto: none` proven, not assumed. (Checked before §5.4 created any table; the rule is unchanged, the table count is not) |
 | Isolation of the `resibo` account | Probed directly; results in the table above |
 | On the server after redeploy | Container `Up (healthy)`, zero DDL, and `information_schema.processlist` showed **10 live connections from the container as user `resibo` on database `resibo`**, with the superuser holding none — the account switch is confirmed in production, not merely configured |
 | Public endpoint through the tunnel | Still `200` |
+
+### 5.4 Authentication and security (2026-11-24)
+
+Committed as `54c5e21`, `963c737`, `d30000f` and `8b57196`. Until these, every
+endpoint was open to anyone who found the hostname. Now every endpoint needs a
+token unless it is on a short public list.
+
+**What it is, in one line:** stateless JWT. Log in, get a token, send it as
+`Authorization: Bearer <token>` on every later call. HS256, 8-hour expiry —
+roughly one shift on a till. No session, no cookie, nothing held server-side.
+
+#### Dependencies
+
+Five, listed in §5.1's table: the Spring Security starter, `jjwt-api`,
+`jjwt-impl` and `jjwt-jackson` at **0.13.0** behind a `jjwt.version` property,
+and `spring-boot-starter-security-test`. §5.1 also records why 0.13 and not
+gainsoclock's 0.11.5, and that JWT code therefore cannot be copied between the
+two projects.
+
+#### Two new tables
+
+`sql/tables/user_role.sql` and `sql/tables/user.sql`. Both `InnoDB`, both
+`utf8mb4` / `utf8mb4_general_ci`, like every other table (`sql/README.md`).
+
+> **Apply `user_role.sql` first.** `user` has a foreign key to it, so the other
+> order fails.
+
+`user_role`:
+
+- `role_name`, unique and case-insensitive under the collation, so `admin` and
+  `ADMIN` cannot both be inserted.
+- **Seeded with `ADMIN` and `EMPLOYEE` by `INSERT IGNORE`**, which keeps the
+  file idempotent and disturbs nothing that already exists.
+- Roles are rows rather than an enum column, so adding one needs no schema
+  change. The application still has to know the name — `types/UserRoleType` —
+  and ignores a row whose name it does not recognise.
+
+`user`:
+
+- `username` `VARCHAR(100)`, **unique and case-insensitive**. The name used to
+  sign up is the name that signs in, whatever the capitalisation.
+- `password` `VARCHAR(100)`, holding a **BCrypt hash, never a plaintext
+  password**. BCrypt output is 60 characters; the extra room is for a future
+  algorithm change without a migration.
+- `user_role_id`, foreign key to `user_role`, **`ON DELETE RESTRICT`** —
+  deleting a role must never silently delete the people who hold it.
+- `is_active`, so an account can be disabled instead of deleted. That matters
+  once a user is referenced by sales records.
+- `last_login_at`, written on every successful login.
+- The four audit columns every table carries.
+
+#### Who can reach what
+
+All of it in `configs/SecurityConfig.java`, in one place on purpose.
+
+| Path | Who |
+|---|---|
+| `OPTIONS /**` | anyone — a preflight carries no token, and challenging it breaks every cross-origin call |
+| `/api/auth/**` | anyone — signup and login |
+| `/api/health/**` | anyone |
+| `/actuator/**` | anyone |
+| `/error` | anyone — see the traps below |
+| `/api/admin/**` | ADMIN |
+| `/api/employee/**` | ADMIN or EMPLOYEE |
+| **everything else** | **any authenticated user** |
+
+**The last row is the one that matters.** The chain ends in
+`anyRequest().authenticated()`, so a new controller is protected the moment it
+exists. Nobody has to remember to add a rule, and forgetting one fails closed.
+
+Exactly two responses use a real HTTP error status:
+
+| Status | Code | When |
+|---|---|---|
+| `401` | `E0401` | No token, a malformed token, a bad signature, or an expired one |
+| `403` | `E0403` | A valid token whose role is not allowed here — logging in again would not help |
+
+Both carry the normal `ResponseDto` envelope, written by
+`JwtAuthenticationEntryPoint` and `JwtAccessDeniedHandler`. **Every business
+error is still `200` with an error code**, as in gainsoclock. These two are the
+exception because the request never reached the application.
+
+`JwtFilter` rejects nothing. It reads the bearer token and, if the token is
+good, sets the security context; a missing or bad token simply leaves the
+request anonymous and lets `SecurityConfig` decide what that means. That is
+what keeps every access rule in one file. The filter adds the `ROLE_` prefix
+when building the authority, because `hasRole("ADMIN")` looks for
+`ROLE_ADMIN` — the prefix is not stored in the database.
+
+#### The signing key
+
+| Key | Default | Note |
+|---|---|---|
+| `JWT_SECRET` | **none — startup fails** | Same rule as the three datasource keys |
+| `JWT_EXPIRATION` | `28800000` (8 hours, in milliseconds) | Tunable per environment |
+
+`jwt.secret` has **no default on purpose**. A fallback would mean every
+environment that forgot to set one shared a signing key readable in a public
+repository. `JwtUtil` builds the key in `@PostConstruct` and **fails the
+application at boot if the secret is shorter than 32 characters**, which is
+what HS256 requires — better at startup than at the first login.
+
+**Local and production use different signing keys, deliberately.** A token
+minted locally is worthless against production. The values live where §8 says;
+neither appears in this document.
+
+#### The role model, and the bootstrap problem
+
+Two roles, `ADMIN` and `EMPLOYEE`. That is a working minimum, not an answer to
+§1.3 — that question is open and the list is expected to grow.
+
+Signup is **public**, and the rules on it are:
+
+- The **first** account created on an empty system becomes ADMIN. Without that,
+  there is no way to get an admin except by editing the database by hand.
+- After that, an **anonymous signup is always EMPLOYEE**, whatever role it asks
+  for. Only an authenticated ADMIN can create another ADMIN.
+
+> ⚠️ **While signup is public and the `user` table is empty, whoever signs up
+> first becomes the administrator.** On a publicly reachable API that is a race,
+> and this API is publicly reachable (§7.3). The window is closed for the
+> current deployment — an ADMIN account exists — but the mechanism is still
+> there and it reopens for every new environment. **Create the admin account
+> immediately after applying the schema.** Recorded as §8.1 risk 6 and §12 #17;
+> closing it properly means requiring a token for signup, or an invite.
+
+Password minimum is 8 characters. Nothing else is enforced yet.
+
+Login returns `username`, `role` and `token` (commit `4883414` removed
+`expiresInSeconds`; the lifetime is server-side only, and a client that needs
+it can read the `exp` claim from the token). The role is
+there so a frontend can decide what to render without decoding the token; the
+token stays the only thing the server trusts, so a client editing that field
+changes nothing about what it may do.
+
+**There is no refresh token, no logout and no revocation.** A token is good for
+its full 8 hours and cannot be withdrawn — disabling an account stops the next
+login, not the token already issued. §12 #18.
+
+#### New error codes
+
+| Code | Meaning |
+|---|---|
+| `E0101` | username required |
+| `E0102` | username longer than 100 characters |
+| `E0103` | password shorter than 8 characters |
+| `E0104` | username already exists — case-insensitively |
+| `E0105` | invalid role |
+| `E0106` | **invalid credentials** |
+| `E0401` | not authenticated (HTTP 401) |
+| `E0403` | no permission (HTTP 403) |
+
+**`E0106` is deliberately one code for three failures**: unknown username,
+wrong password, and disabled account. The message is identical too. Telling
+them apart tells an attacker which usernames are real.
+
+Signup returns a success envelope with no data. It confirms; it does not
+disclose the account it created, not even without the hash.
+
+#### CORS
+
+Open to all origins, all methods, all headers, `maxAge` one hour, with
+`Authorization` exposed so a browser can read it back from a cross-origin
+response.
+
+`allowCredentials` is **false**, which is a decision and not an oversight:
+browsers reject credentials from a `*` origin, and nothing here needs them
+because the token travels in a header rather than a cookie.
+
+It is open so frontend work is not blocked. **Replace `*` with the real
+frontend origins before this API holds live data** — §12 #19.
+
+#### Products moved behind ADMIN
+
+The product endpoints moved from `/api/products/**` to
+`/api/admin/products/**`, and the controller is now
+`controllers/admin/AdminProductController`.
+
+**Naming rule from here on: an admin-only controller is `Admin<Name>Controller`
+in `controllers/admin/`.** The class name and the path then say the same thing,
+and the `/api/admin/**` rule covers it without a per-controller annotation.
+gainsoclock does the same with its `admin/`, `client/` and `employee/`
+sub-packages.
+
+`created_by` and `updated_by` now record the signed-in username instead of the
+literal `manual`. `SecurityUtil.currentUsername()` reads it from the security
+context and falls back to `manual` when nobody is authenticated — which, under
+the rules above, means only the public signup path.
+
+#### Three traps hit while building this
+
+Written down because all three will recur.
+
+1. **A native `SELECT EXISTS(...)` returns `Integer`, not `Boolean`.**
+   Declaring the repository method `boolean` throws
+   `ClassCastException: Integer cannot be cast to Boolean` at runtime. Nothing
+   catches it at compile time, JPQL would never have produced it, and it
+   surfaced as a confusing `401` rather than as an obvious error. The fix is to
+   return `Integer` and convert in a `default` method, which `UserRepository`
+   now does. This is a direct cost of the switch to native SQL (§5.5) and will
+   bite again on the next `EXISTS` or `COUNT`.
+2. **`/error` was missing from the permitAll list.** Spring forwards unhandled
+   errors to `/error`, so with that path protected **every 500 came back as a
+   401** and hid the real failure. It is permitted now and must stay permitted.
+   A `401` where a `500` was expected is the signature of this bug.
+3. **Boot 4 uses Jackson 3.** `ObjectMapper` is
+   `tools.jackson.databind.ObjectMapper`, not
+   `com.fasterxml.jackson.databind.ObjectMapper`. The annotations did **not**
+   move — `@JsonFormat` and friends are still `com.fasterxml.jackson.annotation`.
+   So a file can legitimately import from both packages, which is exactly why
+   this is easy to get wrong.
+
+#### Verified, not assumed (2026-11-24)
+
+Checked against the live public API, not inferred and not only local.
+
+| Check | Result |
+|---|---|
+| First signup on an empty `user` table | Became **ADMIN** |
+| Second signup, requesting ADMIN | Became **EMPLOYEE** — the requested role was ignored |
+| Duplicate username in different capitalisation | `E0104` — the unique constraint is case-insensitive |
+| Password under 8 characters | `E0103` |
+| Unknown role name | `E0105` |
+| Login | Returned `username`, `role` and a token — verified again after `4883414` |
+| Wrong password | `E0106` |
+| Unknown username | `E0106` — identical code and message, as intended |
+| `/api/admin/products/**` with no token | `401` |
+| the same with a garbage token | `401` |
+| the same with an EMPLOYEE token | `403` |
+| the same with an ADMIN token | `200` |
+| CORS preflight from an arbitrary origin | The expected headers came back |
+| The stored `password` column | A BCrypt hash, not the submitted password |
+| `./mvnw -B clean verify` | **BUILD SUCCESS** — 22 tests |
+
+### 5.5 Repositories are native SQL (2026-11-24)
+
+**On the owner's instruction, every repository query is native SQL** —
+`@Query(..., nativeQuery = true)` — rather than JPQL or a derived method name.
+That holds for `ProductRepository`, `UserRepository` and `UserRoleRepository`,
+and for whatever comes next.
+
+Three consequences. All three have already cost time, so they are rules now
+rather than observations:
+
+1. **A paginated native query needs its own `countQuery`.** Spring Data can
+   derive a count from JPQL. It cannot derive one from SQL, so without an
+   explicit `countQuery` the total is unobtainable.
+   `ProductRepository.search` carries one that repeats the `WHERE` clause.
+2. **A `Sort` inside a `Pageable` must carry column names, not entity field
+   names.** Spring Data appends `ORDER BY` using whatever string the `Sort`
+   holds, verbatim: `Sort.by("productName")` produces `ORDER BY productName`,
+   and the column is `product_name`. So `ProductServiceImpl` keeps a
+   `SORT_COLUMNS` map — `productName` → `product_name`, and so on — and
+   translates before building the `PageRequest`. It doubles as the **sort
+   allow-list**: an unrecognised value falls back to `id`, so a typo cannot
+   become a 500 and nothing a caller sends reaches the SQL verbatim.
+3. **`SELECT EXISTS(...)` returns `Integer`.** §5.4's first trap.
+
+Two things the collation buys, and they are why the queries do not wrap columns
+in `LOWER()`: under `utf8mb4_general_ci` a plain `=` is already
+case-insensitive **and** still uses the unique index, where `LOWER(column)`
+would lose the index for no behavioural gain. The same applies to `LIKE`.
+
+Every value is a bound parameter. Nothing is concatenated into a query string,
+so the filters cannot be used to inject SQL.
 
 ---
 
@@ -751,24 +1073,36 @@ footnote.
 ```
 src/main/java/com/api/resibo/
 ├── ResiboApplication.java
-├── controllers/     HealthController
-├── dtos/            ResponseDto
-├── types/           ResponseType
-└── utilities/       MessageType, ResponseUtility
+├── configs/         SecurityConfig
+│   └── jwt/         JwtUtil, JwtFilter, JwtAuthenticationEntryPoint, JwtAccessDeniedHandler
+├── controllers/     AuthController, HealthController
+│   └── admin/       AdminProductController
+├── dtos/            ResponseDto, PageDto, LoginDto, LoginResponseDto, SignupDto, ProductDto, ProductListDto
+├── entities/        Product, User, UserRole
+├── repositories/    ProductRepository, UserRepository, UserRoleRepository
+├── services/
+│   ├── auth/        AuthService + AuthServiceImpl
+│   └── product/     ProductService + ProductServiceImpl
+├── types/           ResponseType, UserRoleType
+└── utilities/       MessageType, ResponseUtility, SecurityUtil, UserUtility
 ```
 
-There is no `modules/` package and no `shared/` package. There are no
-`entities/`, `repositories/` or `services/` packages yet either — those arrive
-flat, in gainsoclock's shape, with the first feature that needs them.
+There is no `modules/` package and no `shared/` package. `entities/`,
+`repositories/` and `services/` arrived flat, in gainsoclock's shape, with the
+first features that needed them — services get a sub-package per feature
+(`auth/`, `product/`) and controllers a sub-package per audience (`admin/`), as
+gainsoclock does.
 
 That is **option A of §6.1.1**, not the modular monolith described below. It was
 taken because the owner's most recent and most specific structural instruction
 was to use gainsoclock as the reference, and the two instructions cannot both be
 honoured as written. **It supersedes the earlier modular-monolith decision — see
 §13 — and it is pending the owner's explicit confirmation**, which is why
-§6.1.1 stays open rather than being marked answered. Six files is the cheapest
-this reversal will ever be; if the answer is B, say so before the first domain
-module lands.
+§6.1.1 stays open rather than being marked answered. **That reversal has stopped
+being cheap.** When this was first written the backend was six files; it is now
+around thirty, across auth, security and the product catalog, and every one of
+them would move. If the answer is B, it needs saying now rather than after the
+next feature.
 
 **The deferred alternative, for the record.** What follows is the
 modular-monolith design as originally decided. **None of it exists on disk.** It
@@ -875,10 +1209,11 @@ to read like. A costs you the boundaries; C defers the cost at interest.
 2026-11-24**, because "use gainsoclock as the structural reference" was the
 later and more specific instruction and something had to be chosen to put a file
 on disk. That is an interpretation, not an answer — so this question stays open,
-and a one-word reply closes it. Right now the whole backend is six classes in
-four packages; switching to B is minutes of work. After the first domain module
-it is hours, and after three it is the expensive kind of restructure option C
-warns about.
+and a one-word reply closes it. **The cheap window has closed.** The backend was
+six classes in four packages when this was written; authentication and the
+product catalog took it to around thirty across ten, so switching to B is now
+hours of mechanical moving rather than minutes. Every further feature adds to
+that bill, which is option C's warning arriving on schedule.
 
 ### 6.1.2 Conventions adopted from gainsoclock
 
@@ -894,18 +1229,22 @@ the reference project read consistently, and none of them conflict with §6.1.
 | Result codes | Short coded strings (`S0001`, error codes per case) alongside the message |
 | DTO pairing | `XxxDto` for a single item or write, `XxxListDto` for a query or list |
 | Enums | In `types/`, suffixed `*Type` |
+| Controller naming | An admin-only controller is `Admin<Name>Controller` in `controllers/admin/`, so the class name and the `/api/admin/**` path agree (§5.4) |
 | Boilerplate | Lombok `@Data` / `@NoArgsConstructor` / `@AllArgsConstructor` on DTOs |
 | Shared helpers | `utilities/` for stateless static helpers |
 | Config | `application.yaml`; `.env` and `.env.*` git-ignored |
 | Deployment | `scripts/deploy.sh`, `scripts/deploy-prelive.sh`; a GitHub Actions workflow (gainsoclock's is `maven.yml`; Resibo's is `ci.yml`) |
 
-**Which of those exist as of 2026-11-24.** Implemented: the `ResponseDto`
-envelope and its fields; `ResponseUtility.getSuccessResponse(message[, data])`
-and `getErrorResponse(code, message)` as static factories; the success code
-`S0001`; `ResponseType` as a `*Type` enum in `types/`; Lombok `@Data` /
-`@NoArgsConstructor` / `@AllArgsConstructor` on the DTO; `utilities/` for
-stateless helpers, which now holds `ResponseUtility` and a `MessageType` class
-of message constants; and `application.yaml` with `.env*` git-ignored.
+**Which of those exist as of 2026-11-24.** All of them except
+`scripts/deploy-prelive.sh`. The envelope and its static factories; the success
+code `S0001` alongside a growing set of error codes; `ResponseType` and
+`UserRoleType` as `*Type` enums in `types/`; Lombok on every DTO; the
+`XxxDto` / `XxxListDto` pairing (`ProductDto` and `ProductListDto`); the
+interface + `XxxServiceImpl` pair for both services, each returning
+`ResponseDto`; message constants in `MessageType` rather than strings at call
+sites; `utilities/` holding `ResponseUtility`, `SecurityUtil` and `UserUtility`;
+the `Admin<Name>Controller` rule; and `application.yaml` with `.env*`
+git-ignored.
 
 `ResponseUtility` fills `className` and `methodName` with `StackWalker`, taking
 the first stack frame outside itself — cleaner than gainsoclock's approach, same
@@ -918,11 +1257,15 @@ workflow — `.github/workflows/ci.yml`, not gainsoclock's `maven.yml` filename 
 whose `build` job runs `mvnw -B clean verify` against a throwaway MariaDB
 service container (§5.3).
 
-Not yet present, and not yet contradicted either: the interface +
-`XxxServiceImpl` service shape and "every service method returns `ResponseDto`"
-(there are no services), the `XxxDto` / `XxxListDto` pairing (there is one DTO),
-error codes beyond `S0001`, and `scripts/deploy-prelive.sh` (no prelive
-environment has been decided — §7, §12 #11).
+Still absent: `scripts/deploy-prelive.sh`, because no prelive environment has
+been decided (§7, §12 #11).
+
+One deliberate divergence from gainsoclock, recorded so it is not read as a
+mistake: `UserUtility` returns **entities** rather than `ResponseDto`, returns
+`null` for a missing role row instead of throwing, and its existence checks
+actually check — gainsoclock's `isUserExistById` tests an object that is never
+null, so it always returns `true`. Building the response is the service's job,
+which is why the utility does not do it.
 
 | Question | My recommendation | Your decision |
 |---|---|---|
@@ -977,19 +1320,17 @@ MariaDB   ──►  nightly backup, off-machine   [see §10]
 ## 7. Environments, hosting, and domain
 
 Production exists as of 2026-11-24, and the honest version of the table is
-below. **"Production" here means the skeleton is reachable, not that there is a
-product behind it** — it serves the two health endpoints and nothing else. It
-now also holds a connection pool to an **empty** schema (§5.3), which is a
-different statement from storing anything.
+below. **"Production" here means the API is reachable, not that there is a POS
+behind it** — it serves health, auth, and an admin-only product catalog (§5.4).
 
 | | Local | CI | Staging / prelive | Production |
 |---|---|---|---|---|
 | Needed? | yes | yes | probably, eventually — §12 #11 | yes |
 | Status | working | **working since 2026-11-24** | **not built** | **live since 2026-11-24** |
 | Where it runs | this machine, from `mvnw` or from the container | a GitHub-hosted runner, `.github/workflows/ci.yml` | — | the shared Ubuntu server, in Docker behind the host's nginx |
-| Database | **the shared MariaDB on the server**, via `.env.dev` — the same instance production uses, which is the problem recorded as §12 #13 | a throwaway MariaDB 11 service container, `resibo_test` (§5.3) | — | **the `resibo` schema on the shared MariaDB**, as the least-privilege `resibo` account. **0 tables** — connected, empty, and read by nothing |
+| Database | **the shared MariaDB on the server**, via `.env.dev` — the same instance *and schema* production uses, which is the problem recorded as §12 #13 | a throwaway MariaDB 11 service container, `resibo_test` (§5.3) | — | **the `resibo` schema on the shared MariaDB**, as the least-privilege `resibo` account. **3 tables** — `product`, `user_role`, `user` |
 | URL | `http://localhost:8083` with the current `.env.dev`, `:8080` without it | — | — | `https://resibo-api.polbinsenthabyer.uk` |
-| What it serves | `/api/health/check` and `/actuator/health` | nothing — it builds and tests | — | the same two endpoints, and nothing else |
+| What it serves | the eight endpoints in §5.1 | nothing — it builds and tests | — | the same eight endpoints |
 
 | Question | Answer |
 |---|---|
@@ -997,7 +1338,7 @@ different statement from storing anything.
 | Server OS / specs | Ubuntu (version still unconfirmed — not needed now that the build runs in a container) |
 | How we deploy (git pull + restart / Docker / CI pipeline) | **Docker, from a git checkout on the server** — `git pull` then `scripts/deploy.sh`, which builds the image there, restarts, health-gates, and rolls back on failure. Full procedure in §7.3. `.github/workflows/ci.yml` now exists: its `build` job is the test gate (and the reason for the CI service container, §5.3), and it **declares** a `deploy` job that runs the same `scripts/deploy.sh` on a self-hosted runner labelled `resibo-deploy`. The manual command in §7.3 is still the documented path, and the CI-driven one is not described there — see §12 #16. |
 | Domain name | `resibo-api.polbinsenthabyer.uk` — a subdomain of the zone that already serves the sibling projects. No new domain was bought. |
-| Cloudflare role: DNS only / proxied / Tunnel / Access in front of admin | **Proxied DNS over a Cloudflare Tunnel.** The existing `personal-projects` tunnel is reused rather than a new one created; a `CNAME` points the hostname at it. **Access is not in front of anything** — the API is open to the internet, which is tolerable only while it serves health checks. Revisit before the first real endpoint. |
+| Cloudflare role: DNS only / proxied / Tunnel / Access in front of admin | **Proxied DNS over a Cloudflare Tunnel.** The existing `personal-projects` tunnel is reused rather than a new one created; a `CNAME` points the hostname at it. **No edge authentication sits in front of it** — Cloudflare Access is not configured, so anything the application does not protect itself is open to the internet. Since 2026-11-24 the application does protect itself (§5.4), which changes this from a live hole to a hardening question: §12 #12. Public signup is the part that is still open by design (§8.1 risk 6). |
 | TLS: Cloudflare origin cert / Let's Encrypt | **Neither.** TLS terminates at Cloudflare's edge and the tunnel carries the request to the origin, so the origin holds no certificate: nginx listens on plain HTTP on loopback, and the container is published on loopback. Nothing on the LAN speaks TLS and nothing needs to. |
 | Who else needs server access | Open — nobody but the owner today. |
 
@@ -1068,7 +1409,7 @@ What was actually tested, not assumed:
 | Database connection | **Working**, verified with a real query |
 | MariaDB version | 11.8.6-MariaDB-5ubuntu0.1 (Ubuntu) |
 | Server charset / collation | `utf8mb4` / `utf8mb4_uca1400_ai_ci` |
-| `resibo` schema | Exists, and is **still empty** — no tables, even after the connected application has run (§5.3) |
+| `resibo` schema | Exists, and **holds three tables** as of 2026-11-24 — `product`, `user_role`, `user`, all applied by hand from `sql/tables/` with the administrative account. None of them was created by Hibernate; `ddl-auto` is still `none` (§5.3) |
 | Least-privilege `resibo` account | **Created and in use 2026-11-24.** Grants are `USAGE ON *.*` plus `ALL PRIVILEGES ON resibo.*`, no `GRANT OPTION`; isolation probed, not inferred (§5.3). Resolves §8.1 risk 2 |
 | The application's connection, from production | `information_schema.processlist` showed **10 connections from the container as `resibo` on database `resibo`**, superuser none (§5.3) |
 | Shared host | ⚠️ The same MariaDB instance also hosts unrelated databases for other projects |
@@ -1086,10 +1427,12 @@ What was actually tested, not assumed:
    least-privilege app user" was therefore the actual fix rather than good
    practice, and it was **done on 2026-11-24** (§5.3, §8.1 risk 2). What is left
    of the risk is the account's `%` host part (§12 #14), not its privileges.
-3. **The `resibo` schema is empty**, so there is no legacy structure to work
-   around — the schema in §4 can be designed freely once the blockers are
-   answered. It stays empty on purpose: `ddl-auto: none` means the application
-   will not create a table even now that it is connected (§5.3).
+3. **The `resibo` schema is no longer empty.** It holds `product`, `user_role`
+   and `user` (§5.4). Each arrived as a reviewed file in `sql/tables/`, run by
+   hand with the administrative account — not from Hibernate, which is still
+   forbidden from issuing DDL (§5.3). The §4 domain model can still be designed
+   freely; it now has three tables to reconcile with rather than none, and
+   nothing records which environment has which (§12 #15).
 
 **Open:** Ubuntu version, and whether MariaDB should stay shared or get a
 dedicated instance for Resibo. The server's JDK is no longer open and no longer
@@ -1101,20 +1444,21 @@ Written down in operational detail because the next person to deploy will be a
 session with no memory of this one, and because one step of it can take the
 neighbouring services down silently.
 
-**What is deployed is the skeleton.** Docker container on the shared Ubuntu
-server, reverse-proxied by the host's nginx, fronted by the Cloudflare tunnel
-that already serves the sibling projects. It answers `/api/health/check` and
-`/actuator/health`. Since 2026-11-24 it also holds a connection pool to the
-empty `resibo` schema as the least-privilege `resibo` account (§5.3) — which
-changes what the deployment needs in its env file, and nothing about what it
-serves. It has no authentication and implements no part of a POS.
+**What is deployed.** A Docker container on the shared Ubuntu server,
+reverse-proxied by the host's nginx, fronted by the Cloudflare tunnel that
+already serves the sibling projects. It answers the eight endpoints listed in
+§5.1: health, actuator, signup, login, and four admin-only product operations.
+It connects to the `resibo` schema as the least-privilege `resibo` account
+(§5.3) and, since 2026-11-24, **authenticates with JWT** (§5.4) — which means
+the env file now also needs `JWT_SECRET`, without which the container will not
+start. It still implements no part of a checkout.
 
 #### On the server
 
 | Path or object | What it is |
 |---|---|
 | `/opt/resibo/app` | A git checkout of `dev/api/resibo`. Cloning needed no credential, because the repository is public (§7.2) — the one convenience that awkward fact buys. |
-| `/opt/resibo/resibo.env` | The environment file, mode `0600`, **outside the checkout and not in git**. As of 2026-11-24 it holds `APP_ENV=prod` **and the datasource keys** — `DATASOURCE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` (§5.3). It is therefore a real secret store now, not a one-line convenience: the `0600` mode and its location outside the checkout stopped being precautionary. Without it the application does not start at all, because the datasource keys have no defaults. |
+| `/opt/resibo/resibo.env` | The environment file, mode `0600`, **outside the checkout and not in git**. As of 2026-11-24 it holds `APP_ENV=prod`, **the datasource keys** — `DATASOURCE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` (§5.3) — and **`JWT_SECRET`** (§5.4). It is therefore a real secret store now, not a one-line convenience: the `0600` mode and its location outside the checkout stopped being precautionary. Without it the application does not start at all, because neither the datasource keys nor the JWT secret have defaults. **Production's signing key differs from the local one on purpose**, so a token minted on a developer's machine is worthless here. |
 | Image `resibo-api:current` | What is running. `:previous` is kept for rollback; `:next` is the staging tag used during a deploy. |
 | Container `resibo-api` | `restart: unless-stopped`, published on `127.0.0.1:8083`, reported `Up (healthy)`. |
 | `/etc/nginx/sites-available/resibo` | The vhost, symlinked into `sites-enabled`. |
@@ -1301,7 +1645,12 @@ My proposal, to be confirmed:
   permissions that work.
 - GitHub access uses a credential helper or a deploy key — never a token in a
   file inside the repo.
-- The JWT signing key is generated per environment and differs between them.
+- **Decided and in place (§5.4):** the JWT signing key is supplied as
+  `JWT_SECRET`, it has **no default** so a missing one fails startup, and
+  **local and production hold different values**. It lives in the same env
+  files as the datasource credentials — `.env.dev` locally,
+  `/opt/resibo/resibo.env` on the server — and its value appears in neither
+  this document nor the repository.
 
 **Your decision / changes:**
 
@@ -1325,11 +1674,12 @@ All values supplied so far live in one git-ignored file outside every repository
 | Database app user (`resibo`) | the application's connection, least privilege | the per-environment env file → `DATABASE_USERNAME` / `DATABASE_PASSWORD`; on the server `/opt/resibo/resibo.env` | ✅ **created and in use 2026-11-24.** Grants and probed isolation in §5.3. The account **name** is a design fact and is written here on purpose; the password is not, anywhere |
 | Cloudflare API token | DNS records and tunnel configuration | handover file | ✅ **working** 2026-11-24 — created for and used by the §7.3 deployment. **Scoped to** Account → Cloudflare Tunnel:Edit, Zone → DNS:Edit, Zone → Zone:Read, on the one zone and no other. |
 | Cloudflare account | DNS, tunnel | reached through the scoped token above; no interactive login needed | ✅ working |
-| Server application env file | per-environment configuration for the container | `/opt/resibo/resibo.env` on the server, mode `0600`, outside the checkout | ✅ in place — and since 2026-11-24 it holds `APP_ENV=prod` **plus the datasource URL, username and password** (§5.3). It is now the one file on the server that must not leak, and the application will not start without it. |
-| Local development env file | local configuration, including the database password | `.env.dev` in the working copy — git-ignored, and `.dockerignore`d under any name | ✅ in place, and **no longer value-free**: it carries a real `DATABASE_PASSWORD` and points at the shared instance (§12 #13). |
+| Server application env file | per-environment configuration for the container | `/opt/resibo/resibo.env` on the server, mode `0600`, outside the checkout | ✅ in place — and since 2026-11-24 it holds `APP_ENV=prod`, **the datasource URL, username and password** (§5.3) and **`JWT_SECRET`** (§5.4). It is the one file on the server that must not leak, and the application will not start without it. |
+| Local development env file | local configuration, including the database password and the local signing key | `.env.dev` in the working copy — git-ignored, and `.dockerignore`d under any name | ✅ in place, and **no longer value-free**: it carries a real `DATABASE_PASSWORD` and a real `JWT_SECRET`, and points at the shared instance (§12 #13). |
 | CI database credentials | the throwaway MariaDB service container in `.github/workflows/ci.yml` | **in the workflow file, in plain sight, deliberately** | ✅ working — and **intentionally not a GitHub Secret**: the container is created for one job and destroyed with it, so there is nothing to protect (§5.3, §13). |
 | Domain registrar login | domain ownership | | not yet provided |
-| JWT signing key | session tokens | generate per environment | not created |
+| JWT signing key | signs and verifies the API's tokens | the per-environment env file → `JWT_SECRET`; on the server `/opt/resibo/resibo.env` | ✅ **created and in use 2026-11-24** (§5.4). **Local and production values differ on purpose.** At least 32 characters or the application refuses to boot. Rotating it invalidates every token in circulation, which is the intended behaviour, not a side effect |
+| Application admin account | the API's own ADMIN login — not a database or server credential | the account lives in the `user` table; its password was supplied in chat | ⚠️ **exposed.** The username `polbinsent` is a design fact and is recorded here; the password is not, anywhere. It was pasted into a chat session, so **it should be changed** — see §8.1 risk 1 |
 | SMTP / email provider | receipts, password reset | | not decided |
 | Payment provider keys | card / e-wallet | | depends on §2.6 |
 
@@ -1350,6 +1700,13 @@ account and the database `root` account should be rotated once key-based access
 works. Verified 2026-11-24: no credential value appears in any commit on any
 branch, so the exposure is to the session transcript only, not to the public
 repository.
+
+> **The same now applies to the application's own admin account.** The password
+> for the ADMIN user `polbinsent` was supplied in chat, so it is exposed in
+> exactly the same way and **should be changed.** It is a different class of
+> credential from the other two — it grants `/api/admin/**`, not the server and
+> not the database — but it is the login to the only administrative account
+> that exists.
 
 **2. ✅ RESOLVED 2026-11-24 — the application no longer connects to MariaDB as
 the superuser.** The risk as originally written: three things compounded — the
@@ -1398,6 +1755,36 @@ developer's machine is not. Nothing writes today only because there are no
 entities. The fix is Testcontainers or a local MariaDB container, and it is
 recorded as §12 #13 rather than left as a habit.
 
+**Correction, 2026-11-24:** "nothing writes today because there are no
+entities" no longer holds. There are three entities, three tables and real rows
+in the shared schema, so a local `mvnw verify` now points a test suite at live
+data. The risk is unchanged in kind and worse in degree.
+
+**6. Public signup makes the first account an administrator.** This replaces the
+larger risk that the whole API was open to the internet, which §5.4 has largely
+closed: products are behind ADMIN, every unlisted endpoint defaults to
+authenticated, and an anonymous signup cannot grant itself a role. What is left
+is the bootstrap.
+
+> **What the exposure is:** `/api/auth/signup` is public, and on a system with
+> an empty `user` table the first caller becomes ADMIN. The API is publicly
+> reachable (§7.3), so between applying the schema and creating the admin
+> account there is a window in which a stranger can take it. For the current
+> production deployment the window is closed — an ADMIN account exists, and
+> every later anonymous signup is forced to EMPLOYEE — but **the mechanism is
+> still in the code and reopens for every new environment**, including a
+> prelive if §12 #11 is answered yes.
+>
+> **What is also still true:** anyone on the internet can create an EMPLOYEE
+> account. No endpoint is restricted to EMPLOYEE today, so that currently grants
+> nothing beyond what any authenticated user can reach — which is nothing. It
+> stops being harmless the first time an `/api/employee/**` endpoint exists.
+>
+> **The fix** is to require a token for signup, or to gate it behind an invite,
+> and to create the admin account by a route that is not a public endpoint.
+> Recorded as §12 #17 rather than quietly patched, because it changes how an
+> environment is set up.
+
 ---
 
 ## 9. Reports the owner actually needs
@@ -1422,8 +1809,8 @@ tax summary for filing · statutory-discount summary.
 |---|---|
 | Acceptable downtime | |
 | Target time to ring up one item (scan or keystroke to line on screen) | |
-| Backup frequency, and where backups are stored | **Still open, and one step closer to urgent.** Nothing is backed up. There is still nothing stateful to back up — the `resibo` schema holds **0 tables** even though the application is now connected to it (§5.3) — so the deadline has not arrived; but the on-server state is no longer a git checkout and a one-line env file. `/opt/resibo/resibo.env` now carries the datasource credentials and exists nowhere else on the server (§7.3), which makes it the first thing on that machine whose loss costs something. This row becomes urgent the day the first table is created, which is also the day a restore test stops being theoretical. |
-| Has a restore ever been tested? (It is not a backup until it has.) | No — there is no backup to restore. |
+| Backup frequency, and where backups are stored | ⚠️ **Open, and the deadline named in the previous version of this row has arrived.** Nothing is backed up. The `resibo` schema now holds three tables with real rows in them — products and the admin account (§5.4) — so "there is nothing stateful to back up" has stopped being true. `/opt/resibo/resibo.env` carries the datasource credentials and the JWT secret and exists nowhere else on the server (§7.3). Losing either now costs something. This row needs an answer before the first sale is ever recorded, not after. |
+| Has a restore ever been tested? (It is not a backup until it has.) | No — and there is now something that would need restoring. |
 | How long sales data must be retained | |
 | Interface language(s) | |
 | Currency, date format, timezone | ⚠️ **Open, and already producing a wrong value.** The running API serialises `responseTime` in **UTC** — `03:27:49` where the machine's clock read `11:27:49` (UTC+08:00). `ResponseDto`'s `@JsonFormat` sets no timezone and Spring's Jackson default is UTC, so every timestamp the API returns is eight hours behind local time. A receipt printed from that is simply wrong, and under §2.3 = B a wrong receipt timestamp is a compliance problem, not a cosmetic one. The fix is one property (`spring.jackson.time-zone`) and it was **deliberately not applied**, because picking the timezone is this row's job, not the code's. Answer the row and the fix lands with it. See §12 #8, §13, §5.1. |
@@ -1449,21 +1836,25 @@ and judge.
 | 7 | Reports from §9 | §9 |
 | 8 | Server, domain, deployment, backups | §7, §8 |
 
-**Where this stands (2026-11-24).** Phase 1 is **partially delivered, and moved
-once since**. Done: the application skeleton, a working Maven build, the
-`ResponseDto` conventions, a health endpoint, two passing tests (§5.1), and —
-as of 2026-11-24 — **the MariaDB connection** (§5.3): JPA starter, driver,
-Hikari pool, a least-privilege account, and `ddl-auto: none`. Not done, and not
-started: Flyway and the first migration, any entity or repository, login, and
-roles. Boundary tests are not merely undone but currently moot — §6.1.1 went to
-layer-first, so there are no module boundaries to test.
+**Where this stands (2026-11-24).** Phase 1 is **substantially delivered, except
+for migrations**. Done: the application skeleton, a working Maven build, the
+`ResponseDto` conventions, a health endpoint, 22 passing tests (§5.1), the
+MariaDB connection (§5.3), and — as of 2026-11-24 — **login and roles** (§5.4):
+JWT, two roles, a `user` and a `user_role` table, and default-deny on every
+endpoint without an explicit rule. Not done: **Flyway and migrations.** The
+three tables that exist were applied by hand from `sql/tables/`, and nothing
+records which environment has which (§12 #15). Boundary tests are moot —
+§6.1.1 went to layer-first, so there are no module boundaries to test.
 
-"The database connection was the one piece that could move now" was the previous
-version of this paragraph, and it moved. **It moved alone**: the pool connects
-to an empty schema, so the application reads and writes nothing. Of what remains
-in phase 1, migrations wait on the §4 schema, which waits on the §2 blockers;
-login and roles wait on §1.3. The next piece that could move without an answer
-is choosing the schema's owner — a migration tool, not a table (§12 #15).
+**Phase 2 is partly delivered, out of order.** There is a product catalog —
+create, update, list with filters and pagination, fetch, delete, all behind
+ADMIN (§5.1, §5.4). There are **no barcodes and no price lists**; `product`
+carries a single price column. Both wait on §1.2 and §3, so the catalog is a
+usable administrative surface rather than a finished phase.
+
+Phase 1's remaining work and phases 3 onwards still wait on answers: migrations
+wait on the §4 schema, which waits on the §2 blockers, and the role model waits
+on §1.3 before it is more than ADMIN and EMPLOYEE.
 
 **Phase 8 is substantially delivered for the API, out of order (2026-11-24).**
 Done and verified in §7.3: the server, a Docker deployment with a health-gated
@@ -1476,12 +1867,11 @@ pattern works is far cheaper now than during phase 3.
 
 What phase 8 does **not** yet include, so nobody reads the row as finished:
 
-- **Backups.** Nothing is backed up, and nothing stateful yet needs to be: the
-  schema the application now connects to holds no tables. What the server does
-  hold, since 2026-11-24, is the datasource credentials in
-  `/opt/resibo/resibo.env` and nowhere else. The §10 backup rows are still
-  blank, and they become urgent the moment the first table exists — not before,
-  and not after.
+- **Backups.** Nothing is backed up, and **that has become a real gap**: the
+  schema holds three tables with rows in them (§5.4), and the server holds the
+  datasource credentials plus the JWT secret in `/opt/resibo/resibo.env` and
+  nowhere else. The §10 backup rows are still blank. They were due "the moment
+  the first table exists", and that moment has passed.
 - **Prelive / staging.** Not built. gainsoclock has one on port 8082 and a
   `deploy-prelive.sh`; Resibo has neither, and whether it should is §12 #11.
 - **CI, past the test gate.** `.github/workflows/ci.yml` exists: its `build` job
@@ -1490,10 +1880,10 @@ What phase 8 does **not** yet include, so nobody reads the row as finished:
   also declares a `deploy` job on a self-hosted runner. **That path is not
   documented in §7.3 and is not the procedure a session should follow** — the
   manual deploy is. §12 #16.
-- **An application worth deploying.** This is the one that matters. The road to
-  the public internet is now paved and tested; that moves phases 2 through 7 not
-  one step. Every `[BLOCKER]` and the §6.1.1 confirmation are exactly as open as
-  they were the day before the deployment.
+- **An application worth deploying.** This is the one that matters. There is now
+  a catalog and a login behind that URL, which is more than a health check and
+  still nothing a shop could use. Every `[BLOCKER]` and the §6.1.1 confirmation
+  are exactly as open as they were the day before the deployment.
 
 **Your changes:**
 
@@ -1510,17 +1900,22 @@ What phase 8 does **not** yet include, so nobody reads the row as finished:
 | 3 | BIR / official receipt (§2.3) | sales schema, numbering, receipt | 2026-11-24 | open |
 | 4 | Tax model (§2.4) | every total on every screen | 2026-11-24 | open |
 | 5 | Stores and terminals (§2.2) | schema, receipt numbering | 2026-11-24 | open |
-| 6 | Roles and permissions (§1.3) | auth model | 2026-11-24 | open |
+| 6 | Roles and permissions (§1.3) | auth model | 2026-11-24 | **open — and now partly implemented anyway.** §5.4 shipped two roles, ADMIN and EMPLOYEE, because authentication needed *some* role model to exist. That is a placeholder, not an answer: the §1.3 table is still blank, and a cashier, a shift supervisor and a bookkeeper are three different sets of permissions that EMPLOYEE currently collapses into one. Roles are rows in `user_role`, so adding one needs no migration — but `UserRoleType` and the path rules in `SecurityConfig` both need editing, so this is cheap rather than free. |
 | 7 | Module boundary enforcement (§6.1) | backend skeleton | 2026-11-24 | moot until #9 — the code has no modules to enforce |
 | 8 | Timezone for serialised timestamps (§10) | every API timestamp, receipt times, Z-reading day boundary, and BIR compliance if §2.3 = B | 2026-11-24 | **open — and now wrong in public, not just locally.** The production response reads `03:57` where local time is `11:57` (§7.3). Deliberately not fixed; see §13. |
-| 9 | Confirm the layer-first package structure (§6.1.1) | every file path in the backend | 2026-11-24 | **open — but the code already follows option A.** Cheap to reverse while the backend is six classes; expensive once domain code exists. |
+| 9 | Confirm the layer-first package structure (§6.1.1) | every file path in the backend | 2026-11-24 | **open — and the cheap window has closed.** The code follows option A. It was six classes when this was raised; authentication and the product catalog took it to around thirty, so reversing to B is now hours of mechanical moving rather than minutes, and it grows with every feature. |
 | 10 | Suppress `className` / `methodName` on production responses (§6.1.2) | nothing structural — but it is live internal detail on an open endpoint | 2026-11-24 | **open, and its deadline has passed.** §6.1.2 required both fields gone from production error responses "before anything is exposed publicly"; the API went public on 2026-11-24 (§7.3) and still returns them on every response. The fix is cheap; what needs deciding is whether to suppress by environment or everywhere. |
 | 11 | Is a prelive / staging environment wanted (§7, §7.3)? | `scripts/deploy-prelive.sh`, the `/api/health/check/prelive` variant gainsoclock has, and a fourth host port | 2026-11-24 | open — gainsoclock has one on 8082; Resibo deliberately has none, and nothing yet justifies one. |
-| 12 | Should Cloudflare Access, or any edge authentication, sit in front of this hostname before the first non-health endpoint ships (§7)? | whether the first real endpoint can go live as-is | 2026-11-24 | open — tolerable today only because the API serves health checks and holds no data. Distinct from the §1.3 application auth question; this one is at the edge. |
-| 13 | **How do local tests get a database?** Right now `mvnw verify` loads `.env.dev` and connects to the **shared production instance** (§5.3, §8.1 risk 5) | whether a careless test can reach real data; also the Testcontainers row in §5 | 2026-11-24 | **open, and the one new risk the database work introduced.** CI is isolated by its own throwaway container; a developer's machine is not. Harmless only while there are no entities — the moment a repository test writes, it writes to the live instance. §5 already recommends Testcontainers; a local MariaDB container is the cheaper half-measure. Needs a decision before the first repository, not after. |
+| 12 | Should Cloudflare Access, or any edge authentication, sit in front of this hostname (§7)? | nothing — it is defence in depth now, not a gate | 2026-11-24 | **open, and much less urgent.** It was raised when the API had no authentication of its own. §5.4 gave it some: products need an ADMIN token and every unlisted endpoint defaults to authenticated. Edge authentication would now be a second layer rather than the only one — and it cannot cover `/api/auth/login`, which has to stay publicly reachable. |
+| 13 | **How do local tests get a database?** Right now `mvnw verify` loads `.env.dev` and connects to the **shared production instance** (§5.3, §8.1 risk 5) | whether a careless test can reach real data; also the Testcontainers row in §5 | 2026-11-24 | **open, and no longer theoretical.** CI is isolated by its own throwaway container; a developer's machine is not. The "harmless while there are no entities" caveat expired on 2026-11-24 — there are three entities, three tables and real rows, so a local test run now points at live data. §5 already recommends Testcontainers; a local MariaDB container is the cheaper half-measure. This needed deciding before the first repository and did not get it. |
 | 14 | Narrow the `resibo` database account's host part from `%` (§5.3, §8.1 risk 2) | nothing — it is hardening, not a blocker | 2026-11-24 | open, deliberately not done. The privilege half of §8.1 risk 2 is closed; this is the connectivity half. Reaching the port at all requires LAN access, so it is the smaller remaining exposure. Narrowing it to the container gateway would also need the local developer's route considered — see #13. |
-| 15 | **Who owns the schema?** `ddl-auto: none` means Hibernate will never create a table, and there is no Flyway and no migration (§5, §5.3) | the first table, and therefore every phase from 2 onwards | 2026-11-24 | open. Not urgent — there is nothing to migrate until §4 is settled — but it is now a *gap* rather than an absence: the application is connected to a schema that nothing is responsible for creating. Decide the tool (Flyway was the recommendation) before the first entity, so the first table arrives as a reviewed migration rather than as a hand-run statement nobody recorded. |
+| 15 | **Who owns the schema?** `ddl-auto: none` means Hibernate will never create a table, and there is no Flyway and no migration (§5, §5.3) | every environment that has to be set up from scratch | 2026-11-24 | **open, and overtaken by events.** "Decide the tool before the first entity" did not happen: three tables now exist — `product`, `user_role`, `user` — applied by hand from `sql/tables/` with the administrative account. The files are reviewable and idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT IGNORE`), which is the good half. The bad half: **nothing records which environment has which file**, nothing handles altering an existing table, and the apply order matters (`user_role` before `user`). Adopting Flyway now also means baselining the three tables that already exist. |
 | 16 | The CI `deploy` job is not documented (§7, §7.3, §11) | nothing technical — it is a documentation gap that can mislead a session | 2026-11-24 | open. `.github/workflows/ci.yml` declares a `deploy` job that runs `scripts/deploy.sh` on a self-hosted runner labelled `resibo-deploy`, with `APP_DIR=/opt/resibo`, `HOST_PORT=8083`, `APP_ENV=prod`. §7.3 describes only the manual path, and this document should not have two answers to "how does it deploy". Confirm whether the runner is registered and whether CI deploys are the intended path, then write the winner into §7.3 and a decision into §13. |
+| 17 | **Should `/api/auth/signup` stay public?** While it is, the first account on an empty system becomes ADMIN, and anyone can create an EMPLOYEE account (§5.4, §8.1 risk 6) | how every new environment is set up, and who can hold an account | 2026-11-24 | open, and the main exposure left after §5.4. The bootstrap window is closed in production because an admin exists, but the mechanism reopens for every new environment. Options: require an ADMIN token for signup and seed the first admin by SQL; keep it public behind an invite code; or leave it and accept that account creation is open. Pick one before a prelive exists or before the first `/api/employee/**` endpoint ships. |
+| 18 | **No token refresh, no logout, no revocation** (§5.4) | how long a stolen token is useful; whether a dismissed employee can be locked out mid-shift | 2026-11-24 | open. A token is valid for its full 8 hours and cannot be withdrawn — setting `is_active = 0` stops the next login, not the token already issued. §5's original recommendation was "short-lived access token + refresh", and only the first half was built. Shortening the expiry makes the problem smaller and the frontend's job harder; a refresh token or a deny-list makes it go away and costs real work. |
+| 19 | **CORS is open to all origins** (§5.4) | nothing today; a browser-based attack surface the moment there is a frontend and real data | 2026-11-24 | open, deliberately. `allowedOriginPatterns` is `*` so frontend work is not blocked, with `allowCredentials=false` limiting what that can be abused for. Replace `*` with the real frontend origins before this API holds live data. Needs the frontend's hostname, which §5 has not decided. |
+| 20 | **`JWT_SECRET` is missing from `.env.example` and from the CI `build` job** (§5.1, §5.4) | a fresh checkout, and the CI test gate | 2026-11-24 | open, and it looks like an oversight rather than a decision. `jwt.secret` has no default and `ResiboApplicationTests` starts the full context, so a checkout that copies the committed template cannot start the application, and CI sets the datasource keys but no signing key. Both are one line each. Needs confirming against an actual CI run before anyone trusts the gate. |
+| 21 | **Is "every repository query is native SQL" a rule or a starting point?** (§5.5) | every repository written from here on | 2026-11-24 | open. It is the owner's instruction and is followed everywhere today. It has already cost one runtime bug (the `Integer` `EXISTS` trap), needs an explicit `countQuery` on every paginated query, and needs a field-to-column map for every sortable listing. Worth confirming it is wanted for simple lookups too, rather than only where JPQL fights the query. |
 
 ---
 
@@ -1566,6 +1961,21 @@ trivia the next session cannot reuse.
 | 2026-11-24 | **A dedicated least-privilege `resibo` database account was created, and the application no longer connects as the superuser** (§5.3; resolves §8.1 risk 2) | The instance is shared with unrelated projects, so a single SQL injection in Resibo running as the superuser reached every other project on the server — the compounding risk §8.1 described. The account holds `USAGE ON *.*` plus `ALL PRIVILEGES ON resibo.*` and **no `WITH GRANT OPTION`**, so it is omnipotent inside its own schema and cannot widen its own access. Isolation was probed rather than inferred: other schemas, `CREATE DATABASE` and `CREATE USER` are all denied. The superuser is kept for migrations and backups run by a person, which is the one use that genuinely needs it. The host part is still `%` and narrowing it is recorded as open (§12 #14) rather than quietly claimed as done. | Owner's call, carried out and verified by Claude |
 | 2026-11-24 | **CI gets a throwaway MariaDB service container, and its credentials are deliberately not GitHub Secrets** (§5.3) | The Spring context test now needs a datasource, and **the real database is on a private network that GitHub-hosted runners cannot reach** — so CI needed a database of its own whether or not isolation was wanted, and isolation is wanted anyway (§12 #13 is about the local case, which has none). MariaDB 11 matches the server's major line closely enough to catch dialect surprises, and the health options (`healthcheck.sh --connect --innodb_initialized`) stop the build racing a container that is listening but not ready. Same approach as gainsoclock's `maven.yml`. The credentials are root/test in plain sight on purpose: the database exists for one job and is destroyed with it, so hiding its password protects nothing — and a repository whose "secrets" include things that are not secret teaches everyone to stop reading the list. | Claude |
 | 2026-11-24 | **The local `.env.dev` port moved from 8088 to 8083**, matching the server's host port (§5.3, §7.3) | 8088 is **eloms' port** on the shared server. Nothing broke — no server env file reads `.env.dev` — but every comparison between a local run and the deployed one had to be mentally corrected, and a URL that looks like a neighbour's service is a trap left lying around for a session with no memory of this one. Aligning them costs nothing and makes `:8083` mean the same thing everywhere. The §7.3 warning about it is now written as resolved rather than live, because a stale warning is read as a current one. | Claude |
+| 2026-11-24 | **Authentication is a stateless JWT — HS256, 8-hour expiry, no server-side session** (§5.4) | §5 recommended it and gainsoclock already works this way, so a session moves between the two projects without re-learning anything. Stateless also means nothing to replicate or stick if there is ever more than one container, and nothing to lose on a restart. 8 hours is chosen to match a shift: a cashier should log in once at the start of the day, not three times. The cost is accepted and recorded, not hidden — a token cannot be revoked before it expires (§12 #18). | Claude, per §5 |
+| 2026-11-24 | **jjwt is pinned at 0.13.0, not the 0.11.5 gainsoclock uses** | 0.11's builder and parser API is deprecated, and starting new code on a deprecated API buys nothing. The consequence is written into §5.1 and the `JwtUtil` javadoc because it will otherwise waste someone's afternoon: **JWT code cannot be copied between the two projects.** The version sits in a `jjwt.version` property so the three artifacts cannot drift apart. | Claude |
+| 2026-11-24 | **`jwt.secret` has no default, `JwtUtil` refuses to start if it is under 32 characters, and local and production use different keys** (§5.4) | Same reasoning as the datasource properties, with a sharper edge: a hardcoded fallback in a **public** repository would be a signing key an attacker can read, shared by every environment that forgot to set one. Validating the length at boot rather than at the first login means a misconfigured deployment fails the health gate instead of accepting logins it cannot sign. Different keys per environment mean a token minted on a developer's machine is worthless against production, which also stops local testing from accidentally becoming production access. | Claude |
+| 2026-11-24 | **The filter chain ends in `anyRequest().authenticated()`** — everything without an explicit rule requires a token (§5.4) | The alternative is a per-controller annotation, and the failure mode of that is silent: a new controller ships public because nobody remembered. Default-deny inverts it — the mistake becomes a 401 on an endpoint that should have been open, which someone notices immediately. It also keeps every access rule in one readable file instead of scattered across annotations. The public list is deliberately short: auth, health, actuator, `/error`, and `OPTIONS`. | Claude |
+| 2026-11-24 | **`401`/`E0401` and `403`/`E0403` are the only responses that use a real HTTP error status; every business error stays `200` with a code** (§5.4) | gainsoclock's envelope convention is that the HTTP status says whether the request was handled and the body says what happened, and consistency with it is worth keeping. These two are genuinely different: the request never reached the application, so there is no business outcome to report. The split is also what clients need — a `401` means "get a new token", a `403` means "stop asking", and an `E0106` in a `200` means "that password is wrong". Both still carry the normal envelope so there is one parse path. | Claude |
+| 2026-11-24 | **`/error` is in the permitAll list, and must stay there** (§5.4) | Found the hard way. Spring forwards unhandled exceptions to `/error`, so while that path was protected **every 500 came back as a 401** — the status was wrong, the message was wrong, and the actual failure was invisible. A permitted `/error` leaks nothing that the exception handler does not already return. Written into the document rather than left as a line of config because the symptom (a 401 where a 500 belongs) looks like an authentication bug and will send the next session hunting in the wrong place. | Claude |
+| 2026-11-24 | **The first account on an empty system becomes ADMIN; after that an anonymous signup is always EMPLOYEE, and only an authenticated ADMIN can create an ADMIN** (§5.4) | Something has to create the first administrator, and the alternatives are worse: a hardcoded default account is a credential in a public repository, and seeding one by SQL means a password in a file in `sql/`. Forcing every later anonymous signup to EMPLOYEE is the part that makes it safe to leave signup public at all — without it, anyone could grant themselves ADMIN by sending `"role": "ADMIN"`. **This is recorded as an exposure, not as a solved problem** (§8.1 risk 6, §12 #17): while signup is public and the table is empty, whoever signs up first becomes the administrator, and on a publicly reachable API that is a race. The window is closed in production and reopens for every new environment. | Claude |
+| 2026-11-24 | **Wrong password, unknown username and disabled account all return `E0106` with the same message** (§5.4) | Distinguishing them turns the login endpoint into a username oracle: an attacker learns which accounts exist, and can then spend its effort on passwords for names it knows are real. The cost is a slightly less helpful error for a legitimate user who mistyped their username, which is the right trade for a login endpoint open to the internet. The failed attempt is logged with the username, so the information is available to an operator and not to a caller. | Claude |
+| 2026-11-24 | **CORS is open to all origins, with `allowCredentials=false`** (§5.4) | Deliberately temporary, and recorded so it is not mistaken for considered. The frontend does not exist and its hostname is not decided (§5), so a restrictive list would block work for no security benefit today. `allowCredentials=false` is the part that is permanent: browsers reject credentials from a `*` origin anyway, and the token travels in the `Authorization` header rather than a cookie, so nothing here needs them. Must be replaced with real origins before the API holds live data — §12 #19. | Claude |
+| 2026-11-24 | **Products moved to `/api/admin/products/**`, and an admin-only controller is named `Admin<Name>Controller` in `controllers/admin/`** (§5.4, §6.1.2) | Grouping by audience in the path means one `SecurityConfig` rule protects a whole area, instead of an annotation per controller that someone can forget. Making the class name match the path means the file tree and the URL tell the same story, and a reviewer can see that a controller is admin-only without opening it. gainsoclock already splits its controllers into `admin/`, `client/` and `employee/`, so this is the sibling project's shape rather than a new invention. The move is breaking, which is cheap now and would not have been later. | Claude |
+| 2026-11-24 | **Roles are rows in a `user_role` table, seeded by `INSERT IGNORE`, not an enum column** (§5.4) | §1.3 is unanswered, so the role list is the part of this design most likely to change — and a row is cheaper to add than a column definition plus a migration. `INSERT IGNORE` keeps the file idempotent, so applying the schema twice is safe and re-running it does not disturb existing rows. The application still has to recognise a role by name (`UserRoleType`), so this is not dynamic authorisation; it is a cheap place to put the list. The foreign key is `ON DELETE RESTRICT` because deleting a role must never silently delete the people who hold it. | Claude |
+| 2026-11-24 | **Every repository query is native SQL** (§5.5) | The owner's instruction. Three consequences are documented rather than rediscovered: a paginated native query needs its own `countQuery`, a `Sort` in a `Pageable` must carry **column** names so the service translates them through a `SORT_COLUMNS` map that doubles as the sort allow-list, and **`SELECT EXISTS(...)` returns `Integer`** — declaring such a method `boolean` throws `ClassCastException` at runtime, which cost real time to find because it surfaced as a confusing 401. The upside is real too: under `utf8mb4_general_ci` a plain `=` is case-insensitive and still uses the unique index, where a JPQL `LOWER()` habit would have thrown the index away. Every value is a bound parameter, so none of this opens an injection path. | Owner, consequences recorded by Claude |
+| 2026-11-24 | **`created_by` and `updated_by` record the signed-in username instead of the literal `manual`** (§5.4) | The columns existed from the first table and were being filled with a placeholder, which made them decoration. With authentication there is an actual actor to record, and audit columns that name a person are the difference between an audit trail and four unused columns — which matters under §2.3 if Resibo ever issues official receipts. `SecurityUtil.currentUsername()` still falls back to `manual` when nobody is authenticated; with the current rules that means only the public signup path. | Claude |
+| 2026-11-24 | **`UserUtility` returns entities rather than `ResponseDto`, and its existence checks actually check** (§6.1.2) | Modelled on gainsoclock's utility of the same name, with the parts that do not survive review left out. Returning `ResponseDto` from a lookup helper forces every caller to unwrap a response envelope to get at an entity, so building the response stays the service's job. It returns `null` for a missing role row instead of throwing, because a missing row means the schema was not fully applied — an operator problem the service should log and report, not a crash. And gainsoclock's `isUserExistById` tests an object that is never null, so it always returns `true`; copying that would have imported a bug that never fails loudly. | Claude |
+| 2026-11-24 | **The product catalog shipped before §3 and §4 were answered, as an admin surface only** | Recorded because it is a departure from "no code past a blocker". A product with a name, a price and a stock count is the smallest thing that could be built, and it was built to have something real behind authentication rather than to settle the catalog: there are no variants, no barcodes, no price lists and no tax fields, all of which §3 and §4 still own. The listing endpoint is a `POST` despite being a read, because the filter and pagination payload belongs in a body and a `GET` body is not reliably carried by proxies and clients — gainsoclock pairs `GET` with `@RequestBody`, which works until something in the path drops it. If §1.2 comes back as a business that needs variants or batches, this table is expected to be replaced rather than extended. | Claude |
 
 ---
 
@@ -1580,3 +1990,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.5 | Reconciled the document with the committed scaffold (`2b6dcd6`). **§6.1 rewritten**: it described a `modules/` tree that does not exist, and now states that the code is layer-first (§6.1.1 option A) with the modular monolith kept as the documented alternative; §6.1.1 stays open as a confirmation item. Added §5.1 recording the scaffold, its dependencies, the `4.2.0.RELEASE` / "packaging: yaml" traps, the local toolchain, and the verified build and endpoints. §5's decision column filled in where code decided it and marked open where nothing has (no JPA, no driver, no Flyway, no auth, no frontend). §6.1.2 answers the `ResponseDto` and Boot/Java questions and lists which conventions actually exist. §10 and §12 #8 record the UTC `responseTime` defect; §12 #9 records the structure confirmation; §11 marks phase 1 partially delivered. Six decisions appended to §13, including the structural supersession. | Claude |
 | 2026-11-24 | 0.6 | Recorded the deployment (`c6e826d`). **§7 filled in**: production exists, serves health endpoints only, and the environments table now distinguishes a live production from an unbuilt prelive. Added **§7.3 "Deployment, as it actually works"** — the on-server layout, the deploy command, the rollback mechanism, the nginx vhost directives, the tunnel ingress with the append-don't-overwrite warning, the server port allocation, and the verified public checks. Added **§5.2** for the container runtime (multi-stage build on the committed `mvnw`, JRE-only non-root runtime, loopback-only publishing, capped logs) and two rows to §5's decision table. §7.2 updated: server access, Docker, nginx and the tunnel now verified; the server's JDK is no longer a question. §8 records the Cloudflare token by scope and the server env file by location, and settles how production values are held. §11 marks phase 8 substantially delivered for the API and lists what it does **not** include — backups, prelive, CI, and an application. §12 gains #10 (`className`/`methodName` now leak publicly — the §6.1.2 deadline has passed), #11 (prelive?) and #12 (edge authentication?), and #8 notes the UTC defect is now wrong in public. Corrected two stale §5.1/§6.1.2 claims: `application.yaml` holds five keys including `spring.config.import`, and `.env.example` plus `scripts/deploy.sh` now exist. Eight decisions appended to §13. | Claude |
 | 2026-11-24 | 0.7 | Recorded the database integration (`9b57c2b`, docs note `bfafb3a`). Added **§5.3 "The database connection"** — the three new dependencies and why the driver is `runtime` scope, the datasource block key by key, **`ddl-auto: none` with its audit-trail reasoning and a hard rule against ever relaxing it**, `open-in-view: false`, the auto-detected `MariaDBDialect`, the five environment keys (matching gainsoclock's names) and where their values live, the local port move from 8088 to 8083, the **least-privilege `resibo` account** with its probed isolation, the **CI MariaDB service container** and why its credentials are not GitHub Secrets, and what was verified. §5's decision table updated: persistence is JPA **in use**, migrations are now the gap that matters, Testcontainers moved from academic to needed. §5.1 gains the three dependencies and a corrected description of `application.yaml` and the env files — `.env.dev` now holds a real credential. §5.2's `extra_hosts` note is no longer hypothetical. §7's environments table gains a **CI** column and states what each environment's database actually is; §7.2 records the new account and the 10 production connections as `resibo`; §7.3 records the env file's new contents and **rewrites the 8088 trap as resolved**. §8's inventory now distinguishes the retired superuser from the application account and adds the local and CI env files; **§8.1 risk 2 is marked RESOLVED** with what was done and what remains, risk 3 is narrowed to the administrative credentials, and a new risk 5 records that local tests reach the shared instance. §10's backup row and §11's phase notes corrected. §12 gains #13 (local tests hit the shared production database), #14 (narrow the account's `%` host), #15 (nothing owns the schema) and #16 (the undocumented CI `deploy` job). Eight decisions appended to §13. **Throughout: "connected to the database" is stated as plumbing, never as persistence — there are still no entities, no repositories and no tables.** | Claude |
+| 2026-11-24 | 0.8 | Recorded authentication (`54c5e21`, `963c737`, `d30000f`, `8b57196`). Added **§5.4 "Authentication and security"** — the five new dependencies and why jjwt is 0.13 and not gainsoclock's 0.11.5, the `user_role` and `user` tables with their apply order and seeded roles, the full access-rules table with its default-deny ending, the two real HTTP error statuses, the signing key and its no-default and 32-character rules, the role model, **the public-signup bootstrap with its warning**, the new `E01xx` error codes and why `E0106` covers three failures, CORS, the move of products behind ADMIN with the `Admin<Name>Controller` naming rule, **three traps** (native `EXISTS` returns `Integer`, `/error` must be permitted, Boot 4 uses Jackson 3), and what was verified against the live public API. Added **§5.5 "Repositories are native SQL"** — `countQuery`, column-name sorting via `SORT_COLUMNS`, and the collation that makes `LOWER()` unnecessary. §5's decision table: auth is **JWT in use**, a password-hashing row added, persistence and migrations rows corrected, tests now 22. §5.1 gains the five dependencies, the `jwt` block, the seven env keys, **the full eight-endpoint API surface**, and a note that `.env.example` and CI are both missing `JWT_SECRET`. §6.1's tree redrawn (around thirty classes, not six) and **the "reversal is cheap" claim withdrawn** in §6.1, §6.1.1 and §12 #9. §6.1.2 records the `Admin<Name>Controller` rule, that almost every gainsoclock convention now exists, and the deliberate `UserUtility` divergence. §4 notes that three of its rows now exist in the database ahead of the section being answered. §7's environments table, §7.2 and §7.3 corrected — three tables, eight endpoints, `JWT_SECRET` in the server env file, and edge authentication reframed as hardening. §8 settles how the signing key is held and adds two inventory rows (the JWT key, and the exposed application admin account — **username only, never the password**). §8.1: risk 1 extended to the admin account, risk 5 corrected now that tables exist, and **new risk 6 for the signup bootstrap**, which replaces the old "the whole API is open" exposure. §10's backup rows and §11's phase notes corrected — phase 1 is substantially delivered and phase 2 partly, and backups are now a real gap. §12 gains #17 (should signup stay public), #18 (no refresh or revocation), #19 (CORS is open), #20 (`JWT_SECRET` missing from `.env.example` and CI) and #21 (is native-SQL-everywhere a rule), with #6, #9, #12, #13 and #15 restated against what now exists. Fifteen decisions appended to §13. **No secret value, server address or OS account name appears anywhere in this document.** | Claude |

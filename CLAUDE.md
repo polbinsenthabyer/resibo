@@ -65,10 +65,20 @@ brief and precise; Conventional Commits, imperative mood.
 
 The backend lives at the **repository root** — `pom.xml` and `src/`, not under
 `backend/` — and is packaged **layer-first** at the base package
-`com.api.resibo`: `controllers/`, `dtos/`, `types/`, `utilities/`, mirroring the
-sibling project gainsoclock. `entities/`, `repositories/` and `services/` join
-them, flat, when a feature needs them. There is no `modules/` package and no
-`shared/` package.
+`com.api.resibo`, mirroring the sibling project gainsoclock:
+
+```
+configs/        SecurityConfig, and jwt/ for the filter, util and two handlers
+controllers/    AuthController, HealthController, and admin/ for admin-only ones
+dtos/           flat: ResponseDto, PageDto, LoginDto, SignupDto, ProductDto...
+entities/       Product, User, UserRole
+repositories/   one Spring Data interface per entity
+services/       auth/ and product/, each an interface plus an *Impl
+types/          ResponseType, UserRoleType
+utilities/      MessageType, ResponseUtility, SecurityUtil, UserUtility
+```
+
+There is no `modules/` package and no `shared/` package.
 
 That is plan §6.1.1 **option A**, and it **supersedes** the earlier
 modular-monolith decision. Anything describing feature modules with enforced
@@ -76,9 +86,9 @@ boundaries — an older copy of this file, or the plan before document version
 0.5 — is describing what was intended, not what exists. Nothing enforces module
 boundaries, because there are no modules.
 
-**The owner has not confirmed it** (plan §12 #9). Do not quietly entrench it: if
-you are about to write the first domain feature, that is the moment to ask.
-Reversing six classes takes minutes; reversing a built-out backend does not.
+**The owner has not confirmed it** (plan §12 #9), and the cheap window has
+closed: it was six classes when the question was raised and is now around
+thirty. Raise it, but do not expect the reversal to be free any more.
 
 Conventions that do hold, and that new code must follow (plan §6.1.2):
 
@@ -90,15 +100,123 @@ Conventions that do hold, and that new code must follow (plan §6.1.2):
 - Response messages are constants in `MessageType`, not strings at call sites.
 - Services are an interface plus an `XxxServiceImpl`, never a bare class.
 - Lombok `@Data` / `@NoArgsConstructor` / `@AllArgsConstructor` on DTOs.
+- **An admin-only controller is `Admin<Name>Controller` in
+  `controllers/admin/`.** The class name and the `/api/admin/**` path then say
+  the same thing, and one `SecurityConfig` rule covers the whole area — no
+  per-controller annotation to forget.
+
+**Boot 4 uses Jackson 3.** `ObjectMapper` is
+`tools.jackson.databind.ObjectMapper`, **not** `com.fasterxml.jackson.databind`.
+The annotations did not move: `@JsonFormat` and friends are still
+`com.fasterxml.jackson.annotation`. So a file can legitimately import from both
+packages, which is why this is easy to get wrong.
+
+## Repositories: native SQL only
+
+**Every repository query is native SQL** — `@Query(..., nativeQuery = true)` —
+on the owner's instruction. No JPQL, no derived method names. Three rules follow
+from that, and all three have already cost a bug (plan §5.5):
+
+1. **A paginated native query needs its own `countQuery`.** Spring Data can
+   derive a count from JPQL but not from SQL.
+2. **A `Sort` in a `Pageable` must carry column names, not entity field
+   names.** The string is appended to `ORDER BY` verbatim, so
+   `Sort.by("productName")` produces `ORDER BY productName` and the column is
+   `product_name`. `ProductServiceImpl` keeps a `SORT_COLUMNS` map and
+   translates; it doubles as the sort allow-list, falling back to `id` on
+   anything unrecognised. Any new sortable listing needs the same.
+3. **A native `SELECT EXISTS(...)` returns `Integer`, not `Boolean`.** Declaring
+   the method `boolean` throws
+   `ClassCastException: Integer cannot be cast to Boolean` at runtime, and it
+   surfaces as a confusing 401 rather than an obvious error. Return `Integer`
+   and convert in a `default` method, as `UserRepository` does. Expect this on
+   the next `EXISTS` or `COUNT`.
+
+Columns are compared with a plain `=` rather than `LOWER(...)`: under
+`utf8mb4_general_ci` that is already case-insensitive **and** still uses the
+unique index. Everything is a bound parameter — never concatenate a value into
+a query string.
+
+## Authentication
+
+Stateless JWT (plan §5.4). HS256, 8-hour token, no session and no cookie. The
+token arrives as `Authorization: Bearer <token>`.
+
+| Path | Who |
+|---|---|
+| `/api/auth/**`, `/api/health/**`, `/actuator/**`, `/error`, `OPTIONS /**` | anyone |
+| `/api/admin/**` | ADMIN |
+| `/api/employee/**` | ADMIN or EMPLOYEE |
+| **everything else** | **any authenticated user** |
+
+The chain ends in `anyRequest().authenticated()`, so **a new controller is
+protected the moment it exists.** Do not add a `permitAll` rule to make
+something work without understanding why it is being challenged.
+
+> ⚠️ **`/error` must stay in the permitAll list.** Spring forwards unhandled
+> exceptions there. With it protected, **every 500 comes back as a 401** and the
+> real failure is invisible. A 401 where you expected a 500 is this bug.
+
+`401`/`E0401` and `403`/`E0403` are the only responses that use a real HTTP
+error status; **every business error is still 200 with a code**, per the
+envelope convention. Both are written by `JwtAuthenticationEntryPoint` and
+`JwtAccessDeniedHandler` and still carry the normal `ResponseDto`.
+
+`JwtFilter` rejects nothing — it reads the token, sets the security context if
+the token is good, and lets `SecurityConfig` decide what an anonymous request
+means. Keep it that way: every access rule belongs in the one file.
+
+Other things not to rediscover:
+
+- **`jwt.secret` has no default and must be at least 32 characters.** `JwtUtil`
+  checks at boot, so a short or missing secret fails startup rather than the
+  first login. Do not add a fallback.
+- **jjwt is 0.13.0, gainsoclock is on 0.11.5.** The builder and parser API
+  differs, so **do not copy JWT code between the two projects.**
+- Two roles, `ADMIN` and `EMPLOYEE`, in the `user_role` table. That is a
+  placeholder for plan §1.3, which is still open — do not treat it as the
+  permission model.
+- Roles are stored without the `ROLE_` prefix; `JwtFilter` adds it when building
+  the authority, because `hasRole("ADMIN")` looks for `ROLE_ADMIN`.
+- **`E0106` covers unknown username, wrong password and disabled account
+  alike**, with an identical message, so usernames cannot be enumerated. Do not
+  "improve" the error by splitting it.
+- **Signup is public and the first account on an empty system becomes ADMIN.**
+  After that an anonymous signup is always EMPLOYEE whatever it asks for. This
+  is a known open exposure (plan §8.1 risk 6, §12 #17), not a finished design —
+  and on a new environment the admin account must be created immediately.
+- `created_by` / `updated_by` record the signed-in username via
+  `SecurityUtil.currentUsername()`, which falls back to `manual` only when
+  nobody is authenticated.
+- **No refresh token, no logout, no revocation.** A token is good for its full
+  8 hours; disabling an account stops the next login, not the current token.
+- CORS is open to all origins with `allowCredentials=false`, deliberately, so
+  frontend work is not blocked. It needs real origins before live data.
+
+**The application admin account is `polbinsent` (ADMIN).** Its password was
+supplied in chat, so it is exposed and should be changed. **Never write that
+password anywhere** — not in this file, the plan, the vault, a commit, or a chat
+message.
 
 ## Database
 
 The application connects to MariaDB (plan §5.3) through Spring Data JPA, as a
 **dedicated least-privilege account scoped to the `resibo` schema** — never the
 instance superuser, which is reserved for migrations and backups run by a
-person. **There are no entities, no repositories, no tables and no migrations.**
-Connected is not the same as persistent; do not describe or report it as
-persistence.
+person.
+
+**Three tables exist**, each as a reviewed file in `sql/tables/` applied by hand
+with the administrative account: `product`, `user_role`, `user`. **There is
+still no migration tool**, so nothing records which environment has which file
+and nothing handles altering a table (plan §12 #15).
+
+> **Apply `user_role.sql` before `user.sql`** — `user` has a foreign key to it.
+> `user_role.sql` seeds its ADMIN and EMPLOYEE rows with `INSERT IGNORE`, so
+> re-running it is safe. Without those rows signup fails with `E9999`.
+
+Every table is `utf8mb4` / **`utf8mb4_general_ci`**, stated explicitly because
+it is *not* the server default. See `sql/README.md`; if a file and an entity
+disagree, the file wins.
 
 > ⚠️ **`spring.jpa.hibernate.ddl-auto` is `none` and must never be changed.**
 > Not to `update`, not to `create`, not to `create-drop`, not "just locally",
@@ -116,18 +234,25 @@ connecting somewhere unintended — do not add fallbacks to make something start
 And `spring.jpa.open-in-view` is `false`; leave it off.
 
 Where the values come from: `DATASOURCE_URL`, `DATABASE_USERNAME`,
-`DATABASE_PASSWORD`, plus `SERVER_PORT` and `DB_POOL_MAX` — names matching
-gainsoclock's `.env`. `.env.example` carries names only; `.env.dev` is
-git-ignored and now holds a **real password**; the server reads
-`/opt/resibo/resibo.env`.
+`DATABASE_PASSWORD`, plus `SERVER_PORT`, `DB_POOL_MAX`, `JWT_SECRET` and
+`JWT_EXPIRATION` — the first five matching gainsoclock's `.env`. `.env.dev` is
+git-ignored and holds a **real password and a real signing key**; the server
+reads `/opt/resibo/resibo.env`.
 
-**Before running tests, know what the datasource points at.** One of the two
-tests starts the Spring context, so `mvnw verify` needs a database — and the
-`.env.dev` in this working copy points at the **shared server instance**, the
-same one production uses. CI is isolated by a throwaway MariaDB service
-container; a local run is not (plan §12 #13, §8.1 risk 5). Nothing writes today
-because there are no entities. Do not be the session that changes that by
-accident.
+`.env.example` carries names only — and **it is missing `JWT_SECRET` and
+`JWT_EXPIRATION`**, so copying it is not enough to start the application. The CI
+`build` job has the same hole: it sets the datasource keys and no signing key,
+while `ResiboApplicationTests` starts the full context. Both are one line each,
+tracked as plan §12 #20, and neither has been changed.
+
+> ⚠️ **Before running tests, know what the datasource points at.**
+> `ResiboApplicationTests` starts the Spring context, so `mvnw verify` needs a
+> database — and the `.env.dev` in this working copy points at the **shared
+> server instance**, the same schema production uses. CI is isolated by a
+> throwaway MariaDB service container; a local run is not (plan §12 #13, §8.1
+> risk 5). **"Nothing writes because there are no entities" no longer applies**
+> — there are three entities, three tables and real rows, including the only
+> admin account. Do not be the session that discovers this the hard way.
 
 ## Secrets
 
@@ -140,14 +265,21 @@ Read it when a task needs it; never echo it back, never commit it, never record
 it in a note. The backend reads secrets from environment variables only — a
 committed `.env.example` lists the names with empty values.
 
+That now includes **`JWT_SECRET`**, the key the API signs tokens with. Record it
+by name and location only. **Local and production hold different values on
+purpose**, so a token minted locally is worthless against production; rotating
+it invalidates every token in circulation, which is intended. It also includes
+the password for the `polbinsent` ADMIN account, which must never be written
+down.
+
 ## Deployment
 
-The skeleton is deployed and publicly reachable. **It serves
-`/api/health/check` and `/actuator/health`, connects to an empty database, and
-implements no part of a POS** — never describe it as more than that, to the
-owner or in a note. Plan §7.3 is the full procedure, §5.2 covers the image and
-§5.3 the database connection; this is the short version, so a session does not
-improvise one.
+The API is deployed and publicly reachable. **It serves health, actuator,
+signup, login and four admin-only product endpoints, and implements no part of
+a checkout** — never describe it as more than that, to the owner or in a note.
+Plan §7.3 is the full procedure, §5.2 covers the image, §5.3 the database
+connection and §5.4 authentication; this is the short version, so a session does
+not improvise one.
 
 | | |
 |---|---|
@@ -155,7 +287,7 @@ improvise one.
 | Runtime | Docker container `resibo-api` on the shared Ubuntu server, published on `127.0.0.1:8083` **only** — never on the LAN |
 | In front of it | the host's nginx vhost, matched by `server_name` → the existing `personal-projects` Cloudflare tunnel |
 | Checkout on the server | `/opt/resibo/app`, on `dev/api/resibo` |
-| Env file | `/opt/resibo/resibo.env`, mode `0600`, outside the checkout and not in git — holds `APP_ENV=prod` **and the datasource credentials**; the application will not start without it |
+| Env file | `/opt/resibo/resibo.env`, mode `0600`, outside the checkout and not in git — holds `APP_ENV=prod`, **the datasource credentials** and **`JWT_SECRET`**; the application will not start without it |
 
 **To deploy** — manual, on the server. `.github/workflows/ci.yml` exists and its
 `build` job is the test gate (it runs `mvnw verify` against a throwaway MariaDB
@@ -209,32 +341,52 @@ repository.
 
 ## Current state
 
-A skeleton exists, is verified, and is **deployed** (see Deployment above):
-Spring Boot 4.2.0 on Java 17, Maven, the `ResponseDto` conventions,
-`GET /api/health/check`, `/actuator/health`, and two passing tests. Since
-2026-11-24 it also **connects to MariaDB** — JPA starter, MariaDB driver at
-`runtime` scope, Hikari pool, a least-privilege `resibo` account, and
-`ddl-auto: none` (see Database above). Verified: build green, `/actuator/health`
-reports `db: UP`, **zero DDL issued and zero tables in the schema**, and
-production runs its 10 pool connections as `resibo`, not as the superuser.
+Spring Boot 4.2.0 on Java 17, Maven, the `ResponseDto` conventions, **deployed**
+(see Deployment above), **connected to MariaDB** as a least-privilege account
+with `ddl-auto: none` (see Database above), and since 2026-11-24 **authenticated
+with JWT** and serving an admin-only product catalog. **22 tests, build green.**
+Eight endpoints exist:
 
-There is still **no schema, no entity, no repository, no migration, no
-authentication and no frontend.** Plan §5.1 records what was generated, §5.3 the
-database connection and what was proven about it, §5.2 and §7.3 how it builds
-into a container and how it reaches the internet.
+| Endpoint | Who |
+|---|---|
+| `GET /api/health/check`, `GET /actuator/health` | anyone |
+| `POST /api/auth/signup`, `POST /api/auth/login` | anyone |
+| `POST /api/admin/products/set` | ADMIN |
+| `POST /api/admin/products/list` | ADMIN |
+| `GET /api/admin/products/get/{productId}` | ADMIN |
+| `DELETE /api/admin/products/delete/{productId}` | ADMIN |
 
-Being deployed and being connected both unblock nothing about the product.
-Every `[BLOCKER]` is as open as it was before, and "it connects to the database"
-must never be relayed as "it has persistence".
+Three tables: `product`, `user_role`, `user`. One account: `polbinsent`, ADMIN.
+Test accounts were removed.
+
+Verified on the live public API (plan §5.4): the first signup became ADMIN, a
+second requesting ADMIN became EMPLOYEE, duplicate usernames were caught
+case-insensitively, a short password gave `E0103`, an invalid role `E0105`,
+login returned the role and an 8-hour expiry, both a wrong password and an
+unknown user gave `E0106`, no token and a garbage token both gave 401, an
+EMPLOYEE token gave 403 and an ADMIN token 200, a CORS preflight from an
+arbitrary origin returned the right headers, and the stored password is a BCrypt
+hash.
+
+There is still **no checkout, no sale, no receipt, no payment, no shift, no
+stock movement, no migration tool and no frontend.** Plan §5.1 records the
+scaffold and the API surface, §5.3 the database connection, §5.4 authentication,
+§5.5 the native-SQL repository rules, §5.2 and §7.3 the container and how it
+reaches the internet.
+
+**None of this unblocks the product.** Every `[BLOCKER]` is as open as it was
+before. A login and a product list are not a POS, and must not be relayed as
+one.
 
 **No JDK is on `PATH` and `JAVA_HOME` is unset. Maven is not installed.** Set
 `JAVA_HOME` in every shell before building, and use the committed wrapper —
-**and note that both commands now need a reachable database**, because the
-datasource has no defaults and one test starts the Spring context:
+**and note that both commands need a reachable database and a `JWT_SECRET` of at
+least 32 characters**, because neither has a default and one test starts the
+Spring context:
 
 ```powershell
 $env:JAVA_HOME = "$env:USERPROFILE\.jdks\ms-17.0.20"   # Microsoft OpenJDK 17.0.20
-.\mvnw.cmd -B clean verify     # compile + tests; needs DATASOURCE_URL et al.
+.\mvnw.cmd -B clean verify     # compile + tests; needs DATASOURCE_URL, JWT_SECRET et al.
 .\mvnw.cmd spring-boot:run     # run on :8083 per .env.dev, or SERVER_PORT
 ```
 
@@ -242,16 +394,18 @@ $env:JAVA_HOME = "$env:USERPROFILE\.jdks\ms-17.0.20"   # Microsoft OpenJDK 17.0.
 — the build stage carries its own JDK — and serves on `:8083` locally. It is
 the same image that runs in production.
 
-Everything past the skeleton is still blocked. Generating it was the owner
-lifting the scaffolding hold for one step, not for the project — do not start on
-the schema, auth, or checkout without answers to §1, §2 and §6.1.1. The database
-connection was a second such step and deliberately as narrow: a connection pool
-and a forbidden `ddl-auto` are identical whatever the §2 answers turn out to be,
-which is exactly why it could be built now. **An entity is not**, so do not
-write one.
+**The checkout is still blocked.** The scaffold, the database connection, the
+product table and authentication were each the owner lifting their own hold for
+one step — not for the project. Do not start on sales, receipts, payments,
+shifts or stock without answers to §1, §2 and §6.1.1: those are the parts the
+§2 answers can invalidate, and a sales table built on a guess is a rewrite.
 
-Two known gaps, so they are not rediscovered as surprises. Both are now visible
-on the public internet, which raises the stakes without changing the answer:
+Three known gaps, so they are not rediscovered as surprises. All are visible on
+the public internet, which raises the stakes without changing the answer:
+
+- **Signup is public and the first account on an empty system becomes ADMIN**
+  (plan §8.1 risk 6, §12 #17). Closed for production because an admin exists;
+  reopens for every new environment.
 
 - `responseTime` serialises in **UTC**, not local time — the production response
   reads `03:57` where local time is `11:57`. **Deliberately not fixed:** the
