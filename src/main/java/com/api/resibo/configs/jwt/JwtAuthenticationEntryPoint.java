@@ -13,14 +13,11 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 
 /**
- * Returned when a request reaches a protected endpoint without a usable token.
+ * Handles requests to protected endpoints that have no valid token.
  *
- * <p>Answers with the project's own {@code ResponseDto} envelope rather than
- * Spring's default error body, so a client parses every failure the same way.
- *
- * <p>The HTTP status is a real <b>401</b>, unlike the business errors which
- * return 200 with an error code — this is a transport-level rejection that
- * never reached application logic.
+ * Returns 401 with the normal ResponseDto envelope, so clients parse every
+ * failure the same way. Note this is a real 401, unlike business errors which
+ * return 200 with an error code — the request never reached the application.
  */
 @Component
 @RequiredArgsConstructor

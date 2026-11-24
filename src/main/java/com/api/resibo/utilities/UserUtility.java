@@ -13,23 +13,14 @@ import java.util.Arrays;
 import java.util.Optional;
 
 /**
- * Lookups and role questions about users, so services do not each re-derive
- * them from two repositories.
+ * User and role lookups, so services do not each wire up two repositories.
  *
- * <p>Modelled on gainsoclock's {@code UserUtility}, with three deliberate
- * differences:
- *
- * <ul>
- *   <li>Nothing here returns a {@code ResponseDto}. A utility that builds HTTP
- *       envelopes forces every caller into one error shape and makes the class
- *       impossible to reuse; that decision belongs to the service.</li>
- *   <li>Every lookup returns {@code null} rather than throwing on a missing
- *       row — gainsoclock's equivalent dereferences the result of a role
- *       lookup and NPEs if the role table was never seeded.</li>
- *   <li>Existence checks genuinely check. gainsoclock's {@code isUserExistById}
- *       tests a response object that is never null, so it always answers
- *       true.</li>
- * </ul>
+ * Based on gainsoclock's UserUtility, with three changes:
+ *  - returns entities, not ResponseDto; building the response is the
+ *    service's job
+ *  - returns null for a missing row instead of throwing NPE
+ *  - the exists checks actually check (gainsoclock's isUserExistById tests an
+ *    object that is never null, so it always returns true)
  */
 @Component
 @RequiredArgsConstructor

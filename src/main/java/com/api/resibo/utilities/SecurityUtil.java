@@ -16,20 +16,14 @@ public class SecurityUtil {
         return passwordEncoder.encode(rawPassword);
     }
 
-    /**
-     * Constant-time comparison via BCrypt. Never compare hashes with
-     * {@code equals} — that leaks timing information.
-     */
+    /** BCrypt comparison. Never use equals() on hashes — it leaks timing. */
     public boolean isPasswordMatched(String submittedPassword, String hashedPassword) {
         return passwordEncoder.matches(submittedPassword, hashedPassword);
     }
 
     /**
-     * Username of the caller, or {@code "manual"} when there is no
-     * authenticated principal.
-     *
-     * <p>This is what finally makes the audit columns meaningful: before
-     * authentication existed every row said "manual", which recorded nothing.
+     * Username of the caller, or "manual" if nobody is authenticated.
+     * Used for the created_by / updated_by columns.
      */
     public String currentUsername() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();

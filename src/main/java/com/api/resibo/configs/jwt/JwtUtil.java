@@ -13,10 +13,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 /**
- * Issues and reads JWTs.
+ * Creates and reads JWTs.
  *
- * <p>Uses the jjwt 0.13 API, which differs from the 0.11 API gainsoclock is
- * on — do not copy token code between the two projects without adjusting it.
+ * Note: jjwt 0.13 here, 0.11 in gainsoclock. The API differs, so token code
+ * cannot be copied between the two projects as-is.
  */
 @Component
 public class JwtUtil {
@@ -33,10 +33,8 @@ public class JwtUtil {
     private SecretKey signingKey;
 
     /**
-     * Built once at startup rather than per call. That also means a secret too
-     * short for HS256 fails the application at boot instead of at the first
-     * login attempt. HS256 needs at least 256 bits — 32 ASCII characters —
-     * and jjwt refuses anything shorter.
+     * Builds the key once at startup, so a too-short secret fails the app at
+     * boot instead of at the first login. HS256 needs 32 characters minimum.
      */
     @PostConstruct
     void init() {

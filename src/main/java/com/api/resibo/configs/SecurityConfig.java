@@ -34,17 +34,13 @@ public class SecurityConfig {
     }
 
     /**
-     * ⚠️ Wide-open CORS, on the owner's instruction, to unblock frontend work.
+     * CORS open to all origins for now, as requested, so frontend work is not
+     * blocked. Replace "*" with the real frontend origins before this holds
+     * live data.
      *
-     * <p>Any origin may call this API from a browser. That is acceptable only
-     * while the data is disposable; before real catalogue or sales data exists,
-     * replace the pattern with the actual frontend origins.
-     *
-     * <p>{@code allowCredentials} stays <b>false</b> deliberately. The browser
-     * forbids credentialed requests from a wildcard origin, and Resibo does not
-     * need it: the token travels in the {@code Authorization} header, not a
-     * cookie. Turning credentials on would require naming every origin
-     * explicitly anyway.
+     * allowCredentials stays false: browsers reject credentials from a "*"
+     * origin, and we do not need them — the token is sent in the Authorization
+     * header, not a cookie.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
@@ -66,30 +62,27 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .cors(Customizer.withDefaults())
-                // Safe to disable: the API is stateless and token-based, so
-                // there is no session cookie for a CSRF attack to ride on.
+                // No session cookie exists for a CSRF attack to use, so this
+                // is safe to disable on a stateless token API.
                 .csrf(AbstractHttpConfigurer::disable)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // CORS preflight carries no credentials and must never
-                        // be challenged, or every cross-origin call fails.
+                        // Preflight carries no token; challenging it would
+                        // break every cross-origin call.
                         .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/health/**").permitAll()
-                        // Spring forwards unhandled exceptions to /error. Leaving
-                        // it protected turns every 500 into a 401, which hides the
-                        // real failure and sends you hunting an auth bug that
-                        // does not exist. It leaks nothing: the body is still the
-                        // project's own envelope.
+                        // Spring forwards unhandled errors to /error. If this
+                        // is protected, every 500 comes back as a 401 and hides
+                        // the real failure.
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/employee/**").hasAnyRole("ADMIN", "EMPLOYEE")
-                        // Default-deny: anything not named above still needs a
-                        // valid token, so a new controller is never accidentally
-                        // public just because nobody added a rule for it.
+                        // Default deny, so a new controller is never public
+                        // just because nobody added a rule for it.
                         .anyRequest().authenticated())
                 .exceptionHandling(handle -> handle
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)

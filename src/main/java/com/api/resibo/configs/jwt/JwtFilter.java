@@ -17,12 +17,11 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * Reads the bearer token and populates the security context.
+ * Reads the bearer token and sets the security context.
  *
- * <p>Never rejects a request itself: a missing or invalid token simply leaves
- * the context unauthenticated, and the filter chain's authorisation rules
- * decide what that means for the endpoint being called. That keeps the
- * "is this endpoint public?" decision in one place — {@code SecurityConfig}.
+ * This filter never rejects anything. A missing or bad token just leaves the
+ * request unauthenticated, and SecurityConfig decides what that means. Keeps
+ * all the "which endpoints are public" rules in one place.
  */
 @Component
 @RequiredArgsConstructor
@@ -50,9 +49,8 @@ public class JwtFilter extends OncePerRequestFilter {
             String role = claims.get(JwtUtil.CLAIM_ROLE, String.class);
 
             if (username != null && role != null) {
-                // Spring's hasRole("ADMIN") looks for the authority
-                // "ROLE_ADMIN", so the prefix is added here rather than being
-                // stored in the token or the database.
+                // hasRole("ADMIN") looks for the authority "ROLE_ADMIN", so
+                // add the prefix here instead of storing it in the database.
                 UsernamePasswordAuthenticationToken auth =
                         new UsernamePasswordAuthenticationToken(
                                 username,

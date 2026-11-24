@@ -156,16 +156,14 @@ public class AuthServiceImpl implements AuthService {
     }
 
     /**
-     * Decides what role a signup actually gets.
+     * Works out which role a signup actually gets.
      *
-     * <p>An anonymous caller cannot choose. The one exception is the first
-     * account on an empty system, which becomes ADMIN — otherwise there is no
-     * way to get an administrator without hand-editing the database.
+     * Anonymous callers cannot pick their own role. The exception is the very
+     * first account, which becomes ADMIN — otherwise there is no way to get an
+     * admin without editing the database by hand.
      *
-     * <p>⚠️ That bootstrap is a real exposure while {@code /api/auth/signup}
-     * is public and the user table is empty: whoever signs up first becomes
-     * administrator. Create your admin account immediately after deploying,
-     * or close signup. Tracked in resibo-plan.md.
+     * Warning: while signup is public and the table is empty, whoever signs up
+     * first becomes admin. Create the admin account right after deploying.
      */
     private UserRoleType resolveGrantedRole(UserRoleType requested) {
         if (userUtility.isFirstUser()) {

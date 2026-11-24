@@ -13,11 +13,10 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 
 /**
- * Returned when the caller is authenticated but lacks the required role — an
- * EMPLOYEE token reaching an {@code /api/admin/**} endpoint, for instance.
+ * Handles a valid token that lacks the required role, such as an EMPLOYEE
+ * calling /api/admin/**.
  *
- * <p><b>403</b>, deliberately distinct from the 401 for "not signed in": a
- * client should not respond to this by trying to log in again.
+ * Returns 403, not 401 — logging in again would not help.
  */
 @Component
 @RequiredArgsConstructor
