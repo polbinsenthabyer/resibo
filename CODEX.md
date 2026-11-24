@@ -14,16 +14,16 @@ Updated: 2026-11-24. This file is the short entry point for a new Codex session.
 - `client/src/api/http.ts` is the single fetch path. It unwraps `ResponseDto`; business errors can arrive with HTTP 200. Authentication uses a provisional `localStorage` token helper.
 - The client defaults to the deployed API. Set `VITE_API_BASE_URL=/api` for the local Vite proxy. Revisit the default before a screen can write data.
 - The client is served as static files at `https://resibo.polbinsenthabyer.uk`. The latest recorded local checks passed `npm run lint` and `npm run build`; the last rescan observed HTTP 200 for the client root, a deep link, and API health. A browser render and CI deployment were not verified in that rescan.
-- The health page now includes a locally bundled SpongeBob dancing GIF for the owner's client pipeline test (`b0e35b4`). Local `npm run lint`, `npm run build`, and `npm run format:check` pass; the build copies `spongebob.gif` into `dist/`. [Client CI run 45365651934](https://github.com/polbinsenthabyer/resibo/actions/runs/45365651934) passed Build and skipped Deploy. The live GIF URL still serves the HTML fallback, so the image is not deployed. The image is temporary and can leave when a real landing page replaces health.
-- Client automatic deployment is now configured with an online `resibo-client-deploy` runner and repository variable `CLIENT_DEPLOY_ENABLED=true`. The workflow and asset retention fix are prepared locally; the first automatic release still needs a pushed run and live verification. Backend auto-deploy stays gated by the separate, unset `DEPLOY_ENABLED` variable.
+- The health page includes a locally bundled SpongeBob dancing GIF for the owner's client pipeline test (`b0e35b4`). Local `npm run lint`, `npm run build`, and `npm run format:check` pass; the build copies `spongebob.gif` into `dist/`. The image is temporary and can leave when a real landing page replaces health.
+- Client automatic deployment is live: [run 45366787290](https://github.com/polbinsenthabyer/resibo/actions/runs/45366787290) passed Build and Deploy on the online `resibo-client-deploy` runner. `CLIENT_DEPLOY_ENABLED=true` is the client-only repository gate; backend `DEPLOY_ENABLED` remains unset. Public `/spongebob.gif` returned `200 image/gif` with the committed SHA-256, the client and API returned 200, and old hashed assets were retained. A `client/**` push now triggers this path; documentation-only pushes do not.
 
 ## Open frontend work
 
-- `scripts/deploy-client.sh` now retains old hashed assets during releases, pending a verified automatic deployment; `scripts/setup-client-server.sh prelive` still reuses the live vhost filename. The latter remains in vault `Tasks.md`.
+- `scripts/deploy-client.sh` now retains old hashed assets during releases, verified on the first automatic deployment. `scripts/setup-client-server.sh prelive` still reuses the live vhost filename; that remains in vault `Tasks.md`.
 - The product and permission decisions in plan §1–§2 and §6.1.1 remain open. Do not invent them while building checkout, sale, receipt, or role-specific UI.
 - Authentication UI, frontend tests, and current documentation reconciliation remain open. Use vault `Tasks.md` for the maintained task list.
 
-**Next action:** push the client workflow and deploy script change; verify both CI jobs and the live GIF, then record the run result in this file and the vault. Before setting up prelive, fix its vhost name collision. Do not start checkout or receipt UI until the plan's relevant blockers are answered.
+**Next action:** take the next frontend task the owner assigns. Monitor the next client commit's Build and Deploy jobs; the first one passed but does not prove future network or runner availability. Before setting up prelive, fix its vhost name collision. Do not start checkout or receipt UI until the plan's relevant blockers are answered.
 
 ## Update contract for every frontend change
 

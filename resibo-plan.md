@@ -1842,10 +1842,10 @@ source of truth that drifts. The script is the reproducible artifact.
 CI builds and the server only receives files — **the server has no Node
 installed and never builds the frontend**, the same division gainsoclock uses.
 Direct `dev/resibo` pushes that touch `client/**`, the client deploy script, or
-the client workflow are configured to build and deploy through a dedicated
+the client workflow build and deploy through a dedicated
 `resibo-client-deploy` runner. `CLIENT_DEPLOY_ENABLED=true` gates only this
 workflow; the backend's `DEPLOY_ENABLED` remains unset. The first automatic
-deployment still needs end-to-end verification.
+run (`e1f80e4`) completed successfully.
 By hand:
 
 ```sh
@@ -1889,6 +1889,7 @@ tunnel** — the seventh service on it — and a proxied
 | Tunnel ingress after the write | **8 rules**, all six neighbours intact, new rule before the catch-all |
 | Neighbours, publicly | `resibo-api` 200, `gainsoclock-app` 200, `gainsoclock-api` and `eloms-api` 401 — their normal unauthenticated answers |
 | Backend redeployed from the new layout | `scripts/deploy.sh` → image built from `server/`, health gate passed, container `Up (healthy)`, `/api/health/check` 200 |
+| First client CI deployment (`e1f80e4`) | [Run 45366787290](https://github.com/polbinsenthabyer/resibo/actions/runs/45366787290): Build **success**, Deploy client to server **success** on `resibo-client-deploy`. Public `/spongebob.gif` returned `200 image/gif`; its SHA-256 matched the committed asset. Client root and API health both returned 200. Old JS/CSS hashes remained in `/var/www/resibo/live/assets`, and the rollback copy existed. The server workflow had zero runs for this frontend commit. |
 
 #### Not done
 
@@ -1896,7 +1897,7 @@ tunnel** — the seventh service on it — and a proxied
   unset, and no runner carries its `resibo-deploy` label. The client's new
   runner has a separate `resibo-client-deploy` label and its own gate, so
   enabling frontend delivery does not activate backend deployment. The
-  client's first automatic run is pending verification. See §12 #22.
+  client's first automatic run passed. See §12 #22.
 - **No prelive for the client.** `setup-client-server.sh prelive` and
   `deploy-client.sh … prelive` already work, but no hostname or tunnel rule
   exists for it (§12 #11).
@@ -2214,7 +2215,7 @@ What phase 8 does **not** yet include, so nobody reads the row as finished:
 | 19 | ~~CORS is open to all origins~~ (§5.4) | — | 2026-11-24 | **RESOLVED 2026-11-24.** The API now answers browser calls only from `https://resibo.polbinsenthabyer.uk`, `http://localhost:5173` and `http://127.0.0.1:5173`. Verified on the live API: those three get an `access-control-allow-origin`; `https://evil.example.com` and `http://localhost:3000` get **403 with no CORS headers**; requests carrying no `Origin` at all — Postman, curl, server-to-server — are unaffected at 200. Naming origins also turned `allowCredentials` on, which changes nothing today because the token travels in the `Authorization` header, not a cookie. |
 | 20 | **`JWT_SECRET` is missing from `.env.example` and from the CI `build` job** (§5.1, §5.4) | a fresh checkout, and the CI test gate | 2026-11-24 | open, and it looks like an oversight rather than a decision. `jwt.secret` has no default and `ResiboApplicationTests` starts the full context, so a checkout that copies the committed template cannot start the application, and CI sets the datasource keys but no signing key. Both are one line each. Needs confirming against an actual CI run before anyone trusts the gate. |
 | 21 | **Is "every repository query is native SQL" a rule or a starting point?** (§5.5) | every repository written from here on | 2026-11-24 | open. It is the owner's instruction and is followed everywhere today. It has already cost one runtime bug (the `Integer` `EXISTS` trap), needs an explicit `countQuery` on every paginated query, and needs a field-to-column map for every sortable listing. Worth confirming it is wanted for simple lookups too, rather than only where JPQL fights the query. |
-| 22 | **How does the frontend get built and deployed?** (§7.4) | nothing — **answered and built** | 2026-11-24 | **mostly closed.** CI builds `client/dist`, `scripts/deploy-client.sh` rsyncs it into `/var/www/resibo/live`, nginx vhost `resibo-web` serves it at `https://resibo.polbinsenthabyer.uk`, and it is verified live. **What remains:** no runner carries the `resibo-deploy` label, so both `deploy` jobs are inert and releases are the manual commands in §7.4. Register a runner for this repository and set `DEPLOY_ENABLED=true`. |
+| 22 | **How does the frontend get built and deployed?** (§7.4) | nothing — **answered, built, and verified** | 2026-11-24 | **Closed for the client.** CI builds `client/dist`; the dedicated `resibo-client-deploy` runner executes `scripts/deploy-client.sh` into `/var/www/resibo/live`; nginx vhost `resibo-web` serves it at `https://resibo.polbinsenthabyer.uk`. Run `45366787290` passed Build and Deploy, and the live GIF matched the committed asset. The backend CI deploy remains separately disabled. |
 | 23 | ~~Two branches each carry a copy of this plan~~ (§7.1) | — | 2026-11-24 | **RESOLVED the same day it was raised.** The monorepo retired `dev/api/resibo` and `dev/app/resibo` in favour of the single `dev/resibo`, so there is one copy of this document again. It cost a rebase and a section renumbering first, which is the evidence for why it was worth resolving rather than managing. |
 
 ---
@@ -2315,3 +2316,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.13 | **CORS restricted** to `https://resibo.polbinsenthabyer.uk`, `http://localhost:5173` and `http://127.0.0.1:5173`, with the `application.yaml` default changed from `*` to that list so a missing `CORS_ALLOWED_ORIGINS` fails closed. §12 **#19 resolved**, with the live evidence: the three named origins allowed, `evil.example.com` and `localhost:3000` both **403 with no CORS headers**, and no-`Origin` clients unaffected. One decision in §13, including why the wildcard override in the server's env file was removed rather than edited. | Claude |
 | 2026-11-24 | 0.14 | Added a locally bundled SpongeBob GIF to the client health page as a visible test for the `client/**` pipeline. §5.6 records its temporary scope and §13 the reason for bundling it. | Codex |
 | 2026-11-24 | 0.15 | Configured client-only automatic deployment with a dedicated runner and `CLIENT_DEPLOY_ENABLED` gate; removed premature asset deletion from `scripts/deploy-client.sh`. §7.4 records the deployment path and its pending end-to-end verification; §13 records the separation from backend deployment. | Codex |
+| 2026-11-24 | 0.16 | Recorded successful end-to-end client CI deployment (`e1f80e4`, run `45366787290`), public GIF hash match, preservation of old assets, and no backend workflow run. Closed §12 #22 for the client. | Codex |
