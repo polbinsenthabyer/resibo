@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { App } from './App'
+import { initializeTheme } from './theme'
 
 // The only global stylesheet: tokens, reset and element defaults. Everything
 // else is a component-scoped *.module.scss.
@@ -13,6 +14,8 @@ if (!container) {
   // point have diverged, and failing loudly beats a blank page.
   throw new Error('Root element #root was not found in index.html.')
 }
+
+initializeTheme()
 
 createRoot(container).render(
   <StrictMode>

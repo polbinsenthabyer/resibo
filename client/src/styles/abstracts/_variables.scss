@@ -7,6 +7,7 @@
 // such as media-query breakpoints.
 
 :root {
+  color-scheme: light;
   // --- colour ---
   --color-surface: #ffffff;
   --color-surface-raised: #f7f8fa;
@@ -38,6 +39,19 @@
   --radius-sm: 4px;
   --radius-md: 8px;
   --border-width: 1px;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-surface: #111827;
+  --color-surface-raised: #1f2937;
+  --color-border: #425066;
+  --color-text: #f3f6fb;
+  --color-text-muted: #b8c4d4;
+  --color-accent: #8ab4ff;
+  --color-accent-contrast: #101827;
+  --color-success: #70dba0;
+  --color-danger: #ff9a91;
 }
 
 // Compile-time only. Media queries cannot read custom properties, so

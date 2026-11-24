@@ -1,25 +1,25 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { paths } from '@/app/paths'
-import { tokenStorage } from '@/api/tokenStorage'
 import { StatusMessage } from '@/components/feedback/StatusMessage'
 import { Button } from '@/components/ui/Button'
 import { env } from '@/config/env'
 
 import { authApi } from '../api'
-import type { LoginResponse } from '../types'
+import { getStoredRole } from '../session'
+import type { UserRole } from '../types'
 
 import styles from './AuthPage.module.scss'
 
 export function LoginPage() {
+  const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
-  const [login, setLogin] = useState<LoginResponse | null>(null)
-  const [hasSavedToken, setHasSavedToken] = useState(() => tokenStorage.get() !== null)
+  const [savedRole, setSavedRole] = useState<UserRole | null>(() => getStoredRole())
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -27,13 +27,15 @@ export function LoginPage() {
 
     setIsSubmitting(true)
     setError(null)
-    setLogin(null)
 
     try {
       const result = await authApi.login({ username: username.trim(), password })
-      setLogin(result)
-      setHasSavedToken(true)
+      if (getStoredRole() !== result.role) {
+        authApi.logout()
+        throw new Error('The login token could not be used. Please try again.')
+      }
       setPassword('')
+      navigate(result.role === 'ADMIN' ? paths.admin : paths.employee, { replace: true })
     } catch (cause) {
       setError(cause instanceof Error ? cause : new Error('Could not sign in. Please try again.'))
     } finally {
@@ -43,8 +45,7 @@ export function LoginPage() {
 
   function handleSignOut() {
     authApi.logout()
-    setHasSavedToken(false)
-    setLogin(null)
+    setSavedRole(null)
     setError(null)
   }
 
@@ -94,14 +95,13 @@ export function LoginPage() {
             {error.message}
           </StatusMessage>
         )}
-        {login && (
-          <StatusMessage tone="success">
-            Signed in as {login.username} ({login.role === 'ADMIN' ? 'administrator' : 'employee'}).
-          </StatusMessage>
-        )}
-        {!login && hasSavedToken && (
+        {savedRole && (
           <StatusMessage tone="pending">
-            A login token is saved on this device. You can sign in again or sign out.
+            A session is saved on this device.{' '}
+            <Link to={savedRole === 'ADMIN' ? paths.admin : paths.employee}>
+              Continue to your {savedRole === 'ADMIN' ? 'admin' : 'employee'} page
+            </Link>{' '}
+            or sign in again.
           </StatusMessage>
         )}
 
@@ -109,7 +109,7 @@ export function LoginPage() {
           <Button type="submit" variant="primary" disabled={isSubmitting}>
             {isSubmitting ? 'Signing in…' : 'Log in'}
           </Button>
-          {hasSavedToken && (
+          {savedRole && (
             <Button onClick={handleSignOut} disabled={isSubmitting}>
               Sign out
             </Button>

@@ -5,7 +5,7 @@
 > disagree, one of them is a bug: either the code drifted, or this file went
 > stale and must be corrected in the same change that revealed it.
 
-**Status: planning, with a deployed API and React client with health and auth pages.** A Spring Boot application runs on the server in Docker behind the
+**Status: planning, with a deployed API and React client with auth and placeholder role pages.** A Spring Boot application runs on the server in Docker behind the
 host's nginx, fronted by the Cloudflare tunnel that already serves the sibling
 projects, answering on `https://resibo-api.polbinsenthabyer.uk` (§7.3). It
 connects to MariaDB as a dedicated least-privilege account, with Hibernate
@@ -15,7 +15,7 @@ catalog.
 
 **Read that narrowly.** What exists is a way to log in and a list of products.
 There is no checkout, no sale, no receipt, no payment, no shift, no stock
-movement; the client has health, login, and signup pages but no POS workflow. **Every `[BLOCKER]` item below is
+movement; the client has login, signup, health, and role welcome pages but no POS workflow. **Every `[BLOCKER]` item below is
 still unanswered, and nothing that depends on one should be written until it
 is.** The two roles are a working minimum, not the answer to §1.3. The
 `product` table is a name, a price and a stock count, not the §4 domain model.
@@ -66,10 +66,10 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.13 — CORS restricted to the deployed client and localhost; scope still unfilled |
+| Document version | 0.20 — role-based welcome pages, local sign-out, and persistent light/dark mode; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-24 |
-| Last updated by | Claude (restricted CORS to named origins and verified it live) — 0.12 was Codex, recording agent ownership; both landed the same day |
+| Last updated by | Codex (frontend role routing, sign-out, and theme) |
 | Plan status | **AWAITING OWNER INPUT** — the API is deployed and authenticated (§5.4, §7.3), and the React client is now deployed too, at `https://resibo.polbinsenthabyer.uk` (§5.6, §7.4). There is still no checkout, no sale and no receipt, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
 | Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` on `dev/resibo`. A second clone at `%USERPROFILE%\sprintify_solutions\personal\app\resibo` is a duplicate; do not edit it until its fate is decided. |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
@@ -1083,7 +1083,8 @@ so the filters cannot be used to inject SQL.
 A React application scaffolded with Vite, now living at **`client/`** on the
 single **`dev/resibo`** branch. It renders, builds, type-checks and lints, is
 deployed as static files (§7.4), and has a health page plus public login and
-signup forms wired to `AuthController`. **It is not a POS screen.**
+signup forms wired to `AuthController`, plus placeholder ADMIN and EMPLOYEE
+pages. **It is not a POS screen.**
 
 The health page includes a locally bundled SpongeBob dancing GIF as a visible
 client pipeline test (2026-11-24). It changes no API behavior. Remove the
@@ -1174,11 +1175,30 @@ The deployed API's CORS allow-list includes the live client and both Vite
 localhost origins (§5.4). An explicit live API override in development can
 therefore work, but it must be intentional.
 
+#### Role landing, sign-out, and appearance
+
+Successful login saves the JWT in `localStorage` and redirects the returned
+ADMIN role to `/admin` or EMPLOYEE role to `/employee`. The pages display
+"Welcome Admin to RESIBO POS" or "Welcome Employee to RESIBO POS" and a
+Sign out button. Sign out removes the stored token and replaces the route with
+`/login`. On reload, client routing decodes the stored JWT role and expiry;
+missing, malformed, or expired tokens go to login, and a wrong-role URL goes to
+the stored role's page. This is a navigation aid only: the browser does not
+verify the signature, and the backend remains the authority for protected
+API calls. There is no token revocation endpoint (§12 #18).
+
+The top header contains branding and a light/dark toggle, with no page links.
+`/` routes to login or the stored role page; the health page remains at
+`/status`. Theme choice is saved separately in `localStorage`, starts from the
+device color preference when unset, and controls shared CSS tokens across all
+pages. The auth cards and header have narrow-screen layout rules. No
+browser-based visual check or successful login submission is claimed here.
+
 #### Deliberately not built
 
-- **No protected product screen or role-based destination.** Login saves a
-  bearer token; signup confirms account creation without signing in. The
-  permission decisions for ADMIN and EMPLOYEE remain open in §1.3.
+- **No protected product screen.** The role destinations are plain placeholders;
+  signup confirms account creation without signing in. The permission
+  decisions for ADMIN and EMPLOYEE remain open in §1.3.
 - **No money or date formatting.** Currency, date format and timezone are blank
   in §10, and `responseTime` serialises in UTC. A formatter would have had to
   guess, and a POS prints those values on receipts — so `features/products`
@@ -2297,6 +2317,7 @@ trivia the next session cannot reuse.
 | 2026-11-24 | Bundle a SpongeBob GIF on the client health page for a pipeline test (§5.6) | The owner asked for a visible client-only change and a push. Keeping the small GIF in `client/public/` makes the result independent of an external image host and guarantees the `client/**` workflow filter matches. It is temporary decoration on the existing health page, not a product design decision. | Owner, implemented by Codex |
 | 2026-11-24 | Give client deployment its own runner label and repository variable (§7.4) | The owner wants every frontend push to build and reach the live site. A shared `DEPLOY_ENABLED` flag would also arm the backend deploy job, which was not requested. `CLIENT_DEPLOY_ENABLED` and `resibo-client-deploy` keep the frontend path independent while the backend gate remains closed. The deploy script retains old hashed assets so an in-flight page does not break during the swap. | Owner, implemented by Codex |
 | 2026-11-24 | Add responsive login and signup pages using the existing auth client; switch the Vite development default to `/api` (§5.6) | The owner requested the two controller flows and made responsive design a standing frontend requirement. Anonymous signup has no meaningful role choice after the first account, so the form omits role; signup does not sign the caller in because the API returns no token. The earlier live development default was chosen for a read-only health page. A write-capable page makes a direct production default too easy to misuse. The local backend still uses the shared live database, so the form warns and the proxy is not presented as data isolation. Production keeps its deployed API default. | Owner, implemented by Codex |
+| 2026-11-24 | Add role welcome routes, local sign-out, remove header page links, and persist light/dark choice (§5.6) | The owner requested a distinct destination for each login role, a Sign out button that clears the locally stored token, a header without page navigation, and dark/light mode. Decode role and expiry only for client navigation; the server must still validate JWT signatures for protected data. Keep `/status` reachable by URL for pipeline diagnostics. Store theme separately so sign-out does not reset the user's appearance preference. | Owner, implemented by Codex |
 
 ---
 
@@ -2323,3 +2344,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.17 | Recorded a second successful client-only push (`99446c1`, run `45367329760`) to verify the `client/**` trigger and repeat deployment. | Codex |
 | 2026-11-24 | 0.18 | Added responsive login and signup pages to §5.6, recorded the development API default change and its shared-database caveat, and superseded the earlier read-only client status. Verification and CI deployment of the new forms remain pending. | Codex |
 | 2026-11-24 | 0.19 | Recorded client CI Build and Deploy success for `6187e06`, live auth route and bundle hash checks, narrow-screen CSS presence, safe API error responses, and the unverified browser submission limit. | Codex |
+| 2026-11-24 | 0.20 | Added role-based placeholder routes, local token clearing on sign-out, root redirect, status-page relocation, header without page links, and persistent light/dark mode to §5.6; recorded the client/server trust boundary and responsive intent. Deployment verification will be appended after CI. | Codex |

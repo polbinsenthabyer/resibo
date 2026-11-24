@@ -12,7 +12,7 @@ export function NotFoundPage() {
     <section>
       <h2>Page not found</h2>
       <p>That route does not exist.</p>
-      <Link to={paths.home}>Back to status</Link>
+      <Link to={paths.home}>Back to home</Link>
     </section>
   )
 }

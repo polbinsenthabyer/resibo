@@ -16,6 +16,11 @@ export const authApi = {
       authenticated: false,
     })
     tokenStorage.set(result.token)
+    if (tokenStorage.get() !== result.token) {
+      throw new Error(
+        'This browser could not save your login. Please enable local storage and try again.',
+      )
+    }
     return result
   },
 

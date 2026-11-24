@@ -4,6 +4,9 @@
  */
 export const paths = {
   home: '/',
+  status: '/status',
   login: '/login',
   signup: '/signup',
+  admin: '/admin',
+  employee: '/employee',
 } as const

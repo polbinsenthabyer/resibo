@@ -56,11 +56,21 @@ from the [SpongeBob SquarePants GIPHY channel](https://giphy.com/gifs/dancing-hi
 ## Authentication pages
 
 `/login` and `/signup` use the existing `authApi` calls. Login stores the JWT
-returned by `AuthController` and offers local sign-out. Signup sends username,
+returned by `AuthController` in local storage and redirects ADMIN to `/admin`
+or EMPLOYEE to `/employee`. Each route shows a simple role-specific welcome
+page with a Sign out button. Sign out clears the stored token and returns to
+`/login`. The client reads the token role and expiry for navigation; the API
+still validates the token for every protected request. Signup sends username,
 password, and optional name; it does not request a role or sign the user in.
 Both forms show the API target, handle server errors, and fit narrow screens.
 The signup page warns in development that `server/.env.dev` currently uses the
 shared live database, even when the browser calls the local `/api` proxy.
+
+`/` opens the matching role page when a valid-looking session is stored, or
+`/login` otherwise. The health page remains at `/status`. The header has no
+page navigation; its light/dark toggle saves the choice in local storage and
+defaults to the device preference on first visit. The forms, welcome pages,
+and header use the same theme tokens and mobile layout rules.
 
 ## Why it is separate from the backend
 
@@ -174,9 +184,8 @@ downloads.** Nothing secret may go in one — see `resibo-plan.md` §8.
 
 ## Known gaps, deliberately
 
-- **No protected product screen.** Login saves a token and signup creates an
-  account, but role-specific UI waits for the permission decisions in plan
-  §1.3.
+- **No protected product screen.** Role-specific welcome pages are placeholders;
+  actual product UI waits for the permission decisions in plan §1.3.
 - **No money or date formatting helpers.** Currency, date format and timezone
   are blank in plan §10, and `responseTime` currently serialises in UTC. A
   formatter here would have had to guess, and a POS prints timestamps on
