@@ -19,6 +19,12 @@ target/
 !**/src/test/**/target/
 HELP.md
 
+### Local documentation ###
+# Working notes and generated guides. Deliberately NOT committed: the
+# committed sources of truth are resibo-plan.md and CLAUDE.md, and a third
+# document that drifts from them is worse than no document.
+docs/
+
 ### Node / React ###
 node_modules/
 dist/
