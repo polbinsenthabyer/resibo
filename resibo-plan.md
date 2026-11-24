@@ -1890,6 +1890,7 @@ tunnel** — the seventh service on it — and a proxied
 | Neighbours, publicly | `resibo-api` 200, `gainsoclock-app` 200, `gainsoclock-api` and `eloms-api` 401 — their normal unauthenticated answers |
 | Backend redeployed from the new layout | `scripts/deploy.sh` → image built from `server/`, health gate passed, container `Up (healthy)`, `/api/health/check` 200 |
 | First client CI deployment (`e1f80e4`) | [Run 45366787290](https://github.com/polbinsenthabyer/resibo/actions/runs/45366787290): Build **success**, Deploy client to server **success** on `resibo-client-deploy`. Public `/spongebob.gif` returned `200 image/gif`; its SHA-256 matched the committed asset. Client root and API health both returned 200. Old JS/CSS hashes remained in `/var/www/resibo/live/assets`, and the rollback copy existed. The server workflow had zero runs for this frontend commit. |
+| Client-only follow-up (`99446c1`) | [Run 45367329760](https://github.com/polbinsenthabyer/resibo/actions/runs/45367329760): a change confined to `client/README.md` triggered Build **success** and Deploy **success**. Public GIF remained `200 image/gif`; client root and API health remained 200. This independently verifies the `client/**` path filter after the deployment gate was enabled. |
 
 #### Not done
 
@@ -2317,3 +2318,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.14 | Added a locally bundled SpongeBob GIF to the client health page as a visible test for the `client/**` pipeline. §5.6 records its temporary scope and §13 the reason for bundling it. | Codex |
 | 2026-11-24 | 0.15 | Configured client-only automatic deployment with a dedicated runner and `CLIENT_DEPLOY_ENABLED` gate; removed premature asset deletion from `scripts/deploy-client.sh`. §7.4 records the deployment path and its pending end-to-end verification; §13 records the separation from backend deployment. | Codex |
 | 2026-11-24 | 0.16 | Recorded successful end-to-end client CI deployment (`e1f80e4`, run `45366787290`), public GIF hash match, preservation of old assets, and no backend workflow run. Closed §12 #22 for the client. | Codex |
+| 2026-11-24 | 0.17 | Recorded a second successful client-only push (`99446c1`, run `45367329760`) to verify the `client/**` trigger and repeat deployment. | Codex |
