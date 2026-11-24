@@ -59,12 +59,12 @@ elif [[ ! -d "$(dirname "$previous")" ]]; then
 fi
 
 # --- place the new files ----------------------------------------------------
-# index.html is excluded here and installed last. Vite names every asset with
-# a content hash, so the new assets can sit alongside the old ones harmlessly;
-# the moment index.html changes, it points at the new ones. Copying it first
-# would leave a window where the page asks for assets that are not there yet.
+# index.html is excluded here and installed last. Keep old assets: a browser
+# may still hold the previous index.html while this sync runs, and deleting its
+# referenced hashes would make that page fail to load. Unused assets can be
+# cleaned up separately after their old HTML is no longer in circulation.
 echo "==> Syncing assets into $target"
-rsync -r --delete --exclude='/index.html' "$build_dir"/ "$target"/
+rsync -r --exclude='/index.html' "$build_dir"/ "$target"/
 
 find "$target" -type d -exec chmod 755 {} +
 find "$target" -type f -exec chmod 644 {} +

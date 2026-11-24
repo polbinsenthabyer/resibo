@@ -1841,6 +1841,11 @@ source of truth that drifts. The script is the reproducible artifact.
 
 CI builds and the server only receives files — **the server has no Node
 installed and never builds the frontend**, the same division gainsoclock uses.
+Direct `dev/resibo` pushes that touch `client/**`, the client deploy script, or
+the client workflow are configured to build and deploy through a dedicated
+`resibo-client-deploy` runner. `CLIENT_DEPLOY_ENABLED=true` gates only this
+workflow; the backend's `DEPLOY_ENABLED` remains unset. The first automatic
+deployment still needs end-to-end verification.
 By hand:
 
 ```sh
@@ -1855,7 +1860,10 @@ cd /opt/resibo/app && bash scripts/deploy-client.sh ~/resibo-client-dist live
 **installs `index.html` last**. Vite fingerprints every asset with a content
 hash, so new assets sit harmlessly beside the old ones; the moment
 `index.html` flips, it points at the new set. Copying it first would leave a
-window where the page asks for assets that are not there yet.
+window where the page asks for assets that are not there yet. The script no
+longer uses `rsync --delete`: an old page can still ask for its old hashed
+assets while a release is being copied. Retired assets require a separate,
+delayed cleanup when no old HTML can reference them.
 
 #### Cloudflare
 
@@ -1884,13 +1892,11 @@ tunnel** — the seventh service on it — and a proxied
 
 #### Not done
 
-- **No CI deploy.** Both workflows declare a `deploy` job on a self-hosted
-  runner labelled `resibo-deploy`, gated behind the `DEPLOY_ENABLED`
-  repository variable. **No runner carries that label.** The only runner on
-  the host is registered to the *gainsoclock* repository as
-  `gainsoclock-deploy`, so registering one for this repository is the single
-  remaining step before pushes deploy themselves. Until then both halves
-  deploy by the manual commands above. See §12 #22.
+- **Backend CI deploy is still disabled.** Its `DEPLOY_ENABLED` variable is
+  unset, and no runner carries its `resibo-deploy` label. The client's new
+  runner has a separate `resibo-client-deploy` label and its own gate, so
+  enabling frontend delivery does not activate backend deployment. The
+  client's first automatic run is pending verification. See §12 #22.
 - **No prelive for the client.** `setup-client-server.sh prelive` and
   `deploy-client.sh … prelive` already work, but no hostname or tunnel rule
   exists for it (§12 #11).
@@ -2286,6 +2292,7 @@ trivia the next session cannot reuse.
 | 2026-11-24 | Codex owns frontend work and Claude Code owns backend work on `dev/resibo`; Codex maintains `CODEX.md` through `AGENTS.md` as a short handoff while the plan and vault remain canonical | The role split reduces overlapping edits, and an automatically discoverable handoff lets a new session recover frontend state after an interruption without creating a competing product specification. Shared contract changes require coordination and reviewer acceptance. | Owner |
 | 2026-11-24 | **CORS is restricted to named origins, and the *default* is the real list rather than `*`** (§5.4) | Owner's instruction to limit the API to the deployed client and local development. The default matters as much as the value: a wildcard default is the kind of silently-wrong setting that reaches production because nothing ever complains about it, so an environment that forgets `CORS_ALLOWED_ORIGINS` now fails closed — the same reasoning that keeps the datasource properties defaultless. **`localhost:5173` is deliberately in the production list**, because the client defaults to calling the deployed API, so `npm run dev` with no local backend is a cross-origin call from localhost to that host; removing it would break the normal development loop. The override that had been sitting in `/opt/resibo/resibo.env` as `CORS_ALLOWED_ORIGINS=*` was commented out so the committed, reviewable list governs rather than an unversioned file — and it is the reason the first deploy of this change had no effect, which is why it was verified against the live API rather than assumed. | Owner, defaulting and verification by Claude |
 | 2026-11-24 | Bundle a SpongeBob GIF on the client health page for a pipeline test (§5.6) | The owner asked for a visible client-only change and a push. Keeping the small GIF in `client/public/` makes the result independent of an external image host and guarantees the `client/**` workflow filter matches. It is temporary decoration on the existing health page, not a product design decision. | Owner, implemented by Codex |
+| 2026-11-24 | Give client deployment its own runner label and repository variable (§7.4) | The owner wants every frontend push to build and reach the live site. A shared `DEPLOY_ENABLED` flag would also arm the backend deploy job, which was not requested. `CLIENT_DEPLOY_ENABLED` and `resibo-client-deploy` keep the frontend path independent while the backend gate remains closed. The deploy script retains old hashed assets so an in-flight page does not break during the swap. | Owner, implemented by Codex |
 
 ---
 
@@ -2307,3 +2314,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.12 | Recorded the owner-assigned Codex frontend and Claude Code backend roles, the shared-file and review method, and the `AGENTS.md` to `CODEX.md` handoff. Corrected the opening frontend status and designated working copy; the four vault notes remain the durable project record. | Codex |
 | 2026-11-24 | 0.13 | **CORS restricted** to `https://resibo.polbinsenthabyer.uk`, `http://localhost:5173` and `http://127.0.0.1:5173`, with the `application.yaml` default changed from `*` to that list so a missing `CORS_ALLOWED_ORIGINS` fails closed. §12 **#19 resolved**, with the live evidence: the three named origins allowed, `evil.example.com` and `localhost:3000` both **403 with no CORS headers**, and no-`Origin` clients unaffected. One decision in §13, including why the wildcard override in the server's env file was removed rather than edited. | Claude |
 | 2026-11-24 | 0.14 | Added a locally bundled SpongeBob GIF to the client health page as a visible test for the `client/**` pipeline. §5.6 records its temporary scope and §13 the reason for bundling it. | Codex |
+| 2026-11-24 | 0.15 | Configured client-only automatic deployment with a dedicated runner and `CLIENT_DEPLOY_ENABLED` gate; removed premature asset deletion from `scripts/deploy-client.sh`. §7.4 records the deployment path and its pending end-to-end verification; §13 records the separation from backend deployment. | Codex |

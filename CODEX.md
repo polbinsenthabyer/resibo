@@ -15,14 +15,15 @@ Updated: 2026-11-24. This file is the short entry point for a new Codex session.
 - The client defaults to the deployed API. Set `VITE_API_BASE_URL=/api` for the local Vite proxy. Revisit the default before a screen can write data.
 - The client is served as static files at `https://resibo.polbinsenthabyer.uk`. The latest recorded local checks passed `npm run lint` and `npm run build`; the last rescan observed HTTP 200 for the client root, a deep link, and API health. A browser render and CI deployment were not verified in that rescan.
 - The health page now includes a locally bundled SpongeBob dancing GIF for the owner's client pipeline test (`b0e35b4`). Local `npm run lint`, `npm run build`, and `npm run format:check` pass; the build copies `spongebob.gif` into `dist/`. [Client CI run 45365651934](https://github.com/polbinsenthabyer/resibo/actions/runs/45365651934) passed Build and skipped Deploy. The live GIF URL still serves the HTML fallback, so the image is not deployed. The image is temporary and can leave when a real landing page replaces health.
+- Client automatic deployment is now configured with an online `resibo-client-deploy` runner and repository variable `CLIENT_DEPLOY_ENABLED=true`. The workflow and asset retention fix are prepared locally; the first automatic release still needs a pushed run and live verification. Backend auto-deploy stays gated by the separate, unset `DEPLOY_ENABLED` variable.
 
 ## Open frontend work
 
-- `scripts/deploy-client.sh` can delete old hashed assets before swapping `index.html`; `scripts/setup-client-server.sh prelive` reuses the live vhost filename. Both are recorded in vault `Tasks.md` and need review before those paths are relied on.
+- `scripts/deploy-client.sh` now retains old hashed assets during releases, pending a verified automatic deployment; `scripts/setup-client-server.sh prelive` still reuses the live vhost filename. The latter remains in vault `Tasks.md`.
 - The product and permission decisions in plan §1–§2 and §6.1.1 remain open. Do not invent them while building checkout, sale, receipt, or role-specific UI.
 - Authentication UI, frontend tests, and current documentation reconciliation remain open. Use vault `Tasks.md` for the maintained task list.
 
-**Next action:** take the next frontend task the owner assigns. The client deploy job needs `DEPLOY_ENABLED=true` and a `resibo-deploy` runner before pushes can reach the live site. Before a client deployment, fix and verify the asset cleanup issue in `scripts/deploy-client.sh`. Before setting up prelive, fix its vhost name collision. Do not start checkout or receipt UI until the plan's relevant blockers are answered.
+**Next action:** push the client workflow and deploy script change; verify both CI jobs and the live GIF, then record the run result in this file and the vault. Before setting up prelive, fix its vhost name collision. Do not start checkout or receipt UI until the plan's relevant blockers are answered.
 
 ## Update contract for every frontend change
 

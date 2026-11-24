@@ -72,20 +72,18 @@ jobs:
   deploy:
     name: Deploy client to server
     # Same three guards as the server workflow: never from a pull request,
-    # only the working branch, and DEPLOY_ENABLED set as a repository
-    # variable.
+    # only the working branch, and CLIENT_DEPLOY_ENABLED set as a repository
+    # variable. The server workflow keeps its separate DEPLOY_ENABLED gate.
     #
-    # ⚠️ No runner carries the `resibo-deploy` label today. The only runner on
-    # the server belongs to the gainsoclock repository and is labelled
-    # `gainsoclock-deploy`, so this job cannot run until a runner is
-    # registered for this repository. Until then the frontend is deployed by
-    # the manual procedure in resibo-plan.md §7.4.
+    # The dedicated client runner uses the `resibo-client-deploy` label. Backend-only
+    # pushes do not start this workflow, and the independent variable keeps
+    # backend auto-deploy disabled when client auto-deploy is enabled.
     if: >-
       github.event_name != 'pull_request'
       && github.ref == 'refs/heads/dev/resibo'
-      && vars.DEPLOY_ENABLED == 'true'
+      && vars.CLIENT_DEPLOY_ENABLED == 'true'
     needs: build
-    runs-on: [self-hosted, resibo-deploy]
+    runs-on: [self-hosted, resibo-client-deploy]
 
     # Serialise client deploys against each other only. Deliberately a
     # different group from the server's, so a backend deploy and a frontend
