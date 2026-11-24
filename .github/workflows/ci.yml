@@ -1,0 +1,73 @@
+name: Resibo CI
+
+# `main` holds only the README, so it is deliberately not a trigger here.
+# All application work lands on dev/api/resibo — see resibo-plan.md §7.1.
+on:
+  push:
+    branches: [dev/api/resibo]
+  pull_request:
+    branches: [dev/api/resibo]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A second push while a deploy is mid-flight would race for the same
+  # container and image tags. Queue instead — and never cancel a running
+  # deploy, which could leave the server between image tags.
+  group: resibo-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get source code
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: maven
+
+      # Tests run here, on a clean machine, before anything touches the
+      # server. The deploy job rebuilds the image from source on the server;
+      # this job is the gate, not the artifact producer.
+      - name: Build and test
+        run: bash ./mvnw -B clean verify
+
+      # When persistence is added, a MariaDB service container goes here and
+      # the datasource env vars point at it — see gainsoclock's maven.yml for
+      # the pattern. The app has no database dependency yet, so there is
+      # nothing to stand up.
+
+  deploy:
+    name: Deploy to server
+    # Only on a real push to the working branch — never from a pull request,
+    # which would let a fork's code reach the server.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/dev/api/resibo'
+    needs: build
+    runs-on: [self-hosted, resibo-deploy]
+    steps:
+      - name: Get source code
+        uses: actions/checkout@v7
+
+      # deploy.sh builds the image, promotes it, health-gates it and rolls
+      # back on failure. It is the same script used for manual deploys, so
+      # CI and a human do exactly the same thing.
+      - name: Deploy
+        run: bash scripts/deploy.sh
+        env:
+          APP_DIR: /opt/resibo
+          HOST_PORT: '8083'
+          APP_ENV: prod
+
+      - name: Report what is running
+        if: always()
+        run: |
+          docker ps --filter name=resibo-api \
+            --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
