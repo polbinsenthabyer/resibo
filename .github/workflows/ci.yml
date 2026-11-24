@@ -12,12 +12,11 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  # A second push while a deploy is mid-flight would race for the same
-  # container and image tags. Queue instead — and never cancel a running
-  # deploy, which could leave the server between image tags.
-  group: resibo-${{ github.ref }}
-  cancel-in-progress: false
+# Concurrency is deliberately scoped to the deploy job, NOT the whole
+# workflow. Serialising everything means one deploy waiting on an unavailable
+# runner holds the group open, and every later run is cancelled as stale
+# pending — so a perfectly good build never reports a result.
+# Build and test must always be free to run and report.
 
 jobs:
   build:
@@ -72,9 +71,34 @@ jobs:
     name: Deploy to server
     # Only on a real push to the working branch — never from a pull request,
     # which would let a fork's code reach the server.
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/dev/api/resibo'
+    # Three guards, all required:
+    #  - never from a pull request, which would let a fork's code reach the server
+    #  - only the working branch
+    #  - DEPLOY_ENABLED must be set to 'true' as a repository variable
+    #
+    # The last one exists because a job whose labels match no runner does not
+    # fail — it sits queued for up to 24 hours, leaving the whole run amber and
+    # hiding a perfectly good build. Skipping is honest and visible.
+    # Turn it on once the self-hosted runner is registered:
+    #   Settings → Secrets and variables → Actions → Variables → DEPLOY_ENABLED = true
+    if: >-
+      github.event_name != 'pull_request'
+      && github.ref == 'refs/heads/dev/api/resibo'
+      && vars.DEPLOY_ENABLED == 'true'
     needs: build
     runs-on: [self-hosted, resibo-deploy]
+
+    # Serialise deploys only. Two deploys at once would race for the same
+    # container and image tags; cancel-in-progress stays false so a running
+    # deploy is never killed between promoting and health-gating an image.
+    concurrency:
+      group: resibo-deploy-${{ github.ref }}
+      cancel-in-progress: false
+
+    # Without a bound, a job with no matching runner sits queued for up to
+    # 24 hours. Fail in minutes instead, so the reason is obvious.
+    timeout-minutes: 20
+
     steps:
       - name: Get source code
         uses: actions/checkout@v7
