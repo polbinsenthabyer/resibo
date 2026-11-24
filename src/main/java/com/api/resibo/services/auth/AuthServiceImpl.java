@@ -8,11 +8,11 @@ import com.api.resibo.dtos.SignupDto;
 import com.api.resibo.entities.User;
 import com.api.resibo.entities.UserRole;
 import com.api.resibo.repositories.UserRepository;
-import com.api.resibo.repositories.UserRoleRepository;
 import com.api.resibo.types.UserRoleType;
 import com.api.resibo.utilities.MessageType;
 import com.api.resibo.utilities.ResponseUtility;
 import com.api.resibo.utilities.SecurityUtil;
+import com.api.resibo.utilities.UserUtility;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,7 +30,7 @@ import java.util.Date;
 public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
-    private final UserRoleRepository userRoleRepository;
+    private final UserUtility userUtility;
     private final SecurityUtil securityUtil;
     private final JwtUtil jwtUtil;
 
@@ -56,7 +56,7 @@ public class AuthServiceImpl implements AuthService {
         if (dto.getPassword() == null || dto.getPassword().length() < MIN_PASSWORD_LENGTH) {
             return ResponseUtility.getErrorResponse("E0103", MessageType.ERROR_PASSWORD_TOO_SHORT);
         }
-        if (userRepository.existsByUsername(username)) {
+        if (userUtility.isUserExistByUsername(username)) {
             return ResponseUtility.getErrorResponse("E0104", MessageType.ERROR_USERNAME_ALREADY_EXISTS);
         }
 
@@ -66,7 +66,7 @@ public class AuthServiceImpl implements AuthService {
         }
         UserRoleType granted = resolveGrantedRole(requested);
 
-        UserRole role = userRoleRepository.findByRoleName(granted.name()).orElse(null);
+        UserRole role = userUtility.findRoleByRoleType(granted);
         if (role == null) {
             // The role rows are seeded by sql/tables/user_role.sql. If they are
             // missing the schema was not fully applied — that is an operator
@@ -116,19 +116,19 @@ public class AuthServiceImpl implements AuthService {
             return ResponseUtility.getErrorResponse("E0106", MessageType.ERROR_INVALID_CREDENTIALS);
         }
 
-        User user = userRepository.findByUsername(username).orElse(null);
+        User user = userUtility.findByUsername(username);
 
         // One code and one message whether the account is missing, disabled or
         // the password is wrong. Distinguishing them tells an attacker which
         // usernames are real.
         if (user == null
-                || !Boolean.TRUE.equals(user.getIsActive())
+                || !userUtility.isActive(user)
                 || !securityUtil.isPasswordMatched(dto.getPassword(), user.getPassword())) {
             log.info("failed login attempt for username={}", username);
             return ResponseUtility.getErrorResponse("E0106", MessageType.ERROR_INVALID_CREDENTIALS);
         }
 
-        UserRole role = userRoleRepository.findRoleById(user.getUserRoleId()).orElse(null);
+        UserRole role = userUtility.findRoleByRoleId(user.getUserRoleId());
         if (role == null) {
             log.error("user {} references missing role id {}", username, user.getUserRoleId());
             return ResponseUtility.getErrorResponse("E9999", MessageType.ERROR_SOMETHING_WENT_WRONG);
@@ -168,7 +168,7 @@ public class AuthServiceImpl implements AuthService {
      * or close signup. Tracked in resibo-plan.md.
      */
     private UserRoleType resolveGrantedRole(UserRoleType requested) {
-        if (!userRepository.anyUserExists()) {
+        if (userUtility.isFirstUser()) {
             return requested == null ? UserRoleType.ADMIN : requested;
         }
         return isCallerAdmin() && requested != null ? requested : UserRoleType.EMPLOYEE;
