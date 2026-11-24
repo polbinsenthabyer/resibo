@@ -41,10 +41,26 @@ server:
   port: ${SERVER_PORT:8080}
 
 # Comma-separated origins allowed to call this API from a browser.
-# "*" allows everything, which is the default while the frontend is in
-# development. The React dev server runs on http://localhost:5173.
+#
+# The default is the real list, not "*", and that is deliberate: an
+# environment that forgets to set CORS_ALLOWED_ORIGINS should fail closed, not
+# open. A wildcard default is the kind of silently-wrong setting that survives
+# to production because nothing complains about it — the same reasoning that
+# keeps the datasource properties defaultless.
+#
+#   https://resibo.polbinsenthabyer.uk   the deployed client
+#   http://localhost:5173                the Vite dev server
+#   http://127.0.0.1:5173                the same server, different origin to
+#                                        a browser, so both have to be named
+#
+# localhost is in the PRODUCTION list on purpose: the client defaults to
+# calling the deployed API (see client/src/config/env.ts), so `npm run dev`
+# with no backend running is a cross-origin call from localhost to this host.
+# Drop those two entries and that workflow stops working.
+#
+# Setting "*" still works and still disables credentials — see SecurityConfig.
 cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:https://resibo.polbinsenthabyer.uk,http://localhost:5173,http://127.0.0.1:5173}
 
 # No default for the secret, deliberately: a hardcoded fallback would mean
 # every environment that forgot to set one shares a signing key an attacker
