@@ -5,11 +5,19 @@
 > disagree, one of them is a bug: either the code drifted, or this file went
 > stale and must be corrected in the same change that revealed it.
 
-**Status: planning, with a skeleton.** A buildable Spring Boot application now
-exists — scaffold, response envelope, health endpoint, green tests (§5.1) — but
-there is no domain code, no schema, and no database connection. **Every
-`[BLOCKER]` item below is still unanswered, and nothing that depends on one
-should be written until it is.**
+**Status: planning, with a deployed skeleton.** A buildable Spring Boot
+application now exists — scaffold, response envelope, health endpoint, green
+tests (§5.1) — and it is deployed: it runs on the server in Docker behind the
+host's nginx, fronted by the Cloudflare tunnel that already serves the sibling
+projects, and answers on `https://resibo-api.polbinsenthabyer.uk` (§7.3).
+
+**Read "deployed" narrowly.** What is live serves the two health endpoints and
+nothing else. There is no domain code, no schema, and **no database connection
+at all** — no JPA, no JDBC driver, no migrations. **Every `[BLOCKER]` item below
+is still unanswered, and nothing that depends on one should be written until it
+is.** A deployed skeleton unblocks none of them; it only means that when there
+is something to ship, the road to the public internet is already built and
+tested.
 
 ---
 
@@ -55,13 +63,14 @@ should be written until it is.**
 
 | Field | Value |
 |---|---|
-| Document version | 0.5 — scaffold recorded; scope still unfilled |
+| Document version | 0.6 — deployment recorded; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-24 |
-| Last updated by | Claude (reconciled with the committed scaffold) |
-| Plan status | **AWAITING OWNER INPUT** — a skeleton exists (§5.1), but every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
+| Last updated by | Claude (recorded the Docker deployment and the Cloudflare tunnel) |
+| Plan status | **AWAITING OWNER INPUT** — the skeleton is deployed and publicly reachable (§7.3), but it serves health endpoints only, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
 | Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
+| Production URL | `https://resibo-api.polbinsenthabyer.uk` — health endpoints only; see §7.3 |
 | This document lives on | branch `dev/api/resibo` — see §7.1 |
 | Vault notes | `Obsidian Vault/Projects/personal/resibo/` |
 
@@ -352,6 +361,8 @@ a choice has been made in code, and says **open** where nothing has been chosen.
 | Spring Boot version | latest 3.x | **4.2.0 — in use.** The Boot 4 line, as gainsoclock uses, not 3.x. |
 | Build tool | Maven — more examples, easier handover | **Maven — in use**, through the committed `mvnw` wrapper (Maven itself is not installed locally). |
 | Packaging | `jar`, embedded server | **`jar` — in use.** See §5.1 on how the owner's "packaging: yaml" note was read. |
+| Deployment artifact | A container image, so the server needs only Docker | **Docker image — in use.** Multi-stage build: `eclipse-temurin:17-jdk` compiles with the committed `mvnw`, `eclipse-temurin:17-jre` runs the jar as a non-root user. See §5.1 and §7.3. |
+| Container runtime | Docker Compose, one service | **In use** — `docker-compose.yml` at the repository root, service `api`, container `resibo-api`, published on loopback only. §7.3. |
 | Configuration format | `application.yaml` | **YAML — in use**, `src/main/resources/application.yaml`. |
 | Boilerplate | Lombok, per §6.1.2 | **Lombok — in use**, `optional` scope. |
 | Runtime probes | Spring Boot Actuator | **Actuator — in use**; `health` and `info` exposed, details only `when-authorized`. |
@@ -443,13 +454,24 @@ Note the paths: the backend sits at the repository root, not under `backend/` as
 §5 proposed. Nothing depends on that yet, but it reopens the question of where a
 frontend would live.
 
-`application.yaml` holds four things and no secrets: the application name
-(`resibo`); `server.port: ${SERVER_PORT:8080}`, so the port is an environment
-override with a sane default; the actuator exposure
+`application.yaml` holds five things and no secrets: the application name
+(`resibo`); `spring.config.import:
+optional:file:.env.${APP_ENV:dev}[.properties]`, which loads a per-environment
+env file from the working directory — `APP_ENV` picks it, `dev` by default, and
+`optional:` means a missing file is not a startup failure; `server.port:
+${SERVER_PORT:8080}`, so the port is an environment override with a sane
+default; the actuator exposure
 (`management.endpoints.web.exposure.include: health,info` and
 `management.endpoint.health.show-details: when-authorized`, so an anonymous
 caller learns liveness and nothing else); and `logging.level.com.api.resibo:
 INFO`.
+
+The env files that go with it: **`.env.example` is committed and carries names
+only**, as §8 promised; `.env.dev`, `.env.prelive` and `.env.prod` are
+git-ignored. They are parsed as a `.properties` file, which is a real
+constraint worth remembering — no `export`, no shell expansion, no quotes
+around values. Nothing in any of them is secret today: the datasource keys are
+present but commented out, because the application has no datasource.
 
 **The API surface, such as it is.** `HealthController` carries
 `@RequestMapping("api/health")` and `@GetMapping("/check")` — so `GET
@@ -484,6 +506,50 @@ to be B, it is potentially a compliance problem. The fix is one line —
 `spring.jackson.time-zone` — but timezone is an open owner question in §10, so
 applying it would be exactly the kind of quiet guess this document exists to
 prevent. Tracked as §12 #8 and recorded in §13.
+
+### 5.2 The container runtime (2026-11-24)
+
+The same source also builds and runs in a container, which is how it is
+deployed (§7.3). Three files at the repository root do it, and these are the
+facts worth knowing without reading them.
+
+**`Dockerfile` — multi-stage.** The build stage is `eclipse-temurin:17-jdk` and
+runs the **committed `mvnw`**, which is the whole point of the wrapper: the
+server needs only Docker, with no JDK and no Maven installed on it. `.mvn/`,
+`mvnw` and `pom.xml` are copied first and `dependency:go-offline` runs on its
+own, so dependency resolution is a cached layer and a source change does not
+re-download the world. The runtime stage is `eclipse-temurin:17-jre` — no
+compiler, no Maven, no source. It adds a **non-root user `resibo`** and owns the
+jar to it; the application never needs to write to the filesystem. `curl` is
+installed for exactly one reason, the container `HEALTHCHECK` against
+`/actuator/health`, and nothing else is added to the runtime image. `ENV
+SERVER_PORT=8080` with `EXPOSE 8080`: **the container always listens on 8080
+internally**, whatever host port it is mapped to, so one image is identical in
+every environment.
+
+**`docker-compose.yml`.** Image
+`${RESIBO_IMAGE:-resibo-api}:${RESIBO_TAG:-current}`, container `resibo-api`,
+`restart: unless-stopped`. The env file uses the long `env_file` form pointing
+at `${RESIBO_ENV_FILE:-./.env.dev}` with `required: false`, so a local checkout
+starts with no setup while the server points the same variable at a file
+outside the checkout. `SERVER_PORT` is forced to `8080` inside the container,
+reinforcing the rule above. Ports publish as `127.0.0.1:${HOST_PORT:-8083}:8080`
+— **loopback only, never on the LAN**; the only thing that may reach the
+container is nginx on the same host. `extra_hosts:
+host.docker.internal:host-gateway` is present and currently unused, ready for
+the day the container has to reach the host's MariaDB. Logging is capped —
+`json-file`, 10 MB × 3 — because the server hosts several applications and none
+of them should be able to fill the shared disk.
+
+**`.dockerignore`.** Keeps the build context small and, more to the point, keeps
+secrets and local state out of the image under any name: `.env*` with
+`.env.example` excepted, `*.pem` / `*.key` / `*.p12` / `*.jks`, `secrets/`,
+`target/`, `.git/`, and the Markdown docs — the last of those so that editing
+this file cannot invalidate the dependency cache layer.
+
+One pleasant side effect: the `JAVA_HOME`-in-every-shell friction described
+above is a local-development problem only. It does not exist in the container
+or on the server.
 
 ---
 
@@ -657,16 +723,21 @@ of message constants; and `application.yaml` with `.env*` git-ignored.
 the first stack frame outside itself — cleaner than gainsoclock's approach, same
 result, and verified to resolve correctly (§5.1).
 
+Added since, and recorded elsewhere in this document: `scripts/deploy.sh` in
+gainsoclock's shape (§7.3), and the committed `.env.example` the §8 rules
+promised, carrying variable names with empty values (§5.1).
+
 Not yet present, and not yet contradicted either: the interface +
 `XxxServiceImpl` service shape and "every service method returns `ResponseDto`"
 (there are no services), the `XxxDto` / `XxxListDto` pairing (there is one DTO),
-error codes beyond `S0001`, the deploy scripts, the GitHub Actions workflow, and
-the `.env.example` §8 promises.
+error codes beyond `S0001`, `scripts/deploy-prelive.sh` (no prelive environment
+has been decided — §7, §12 #11), and the GitHub Actions workflow (deployment is
+deliberately manual for now — §7.3).
 
 | Question | My recommendation | Your decision |
 |---|---|---|
-| Keep the `ResponseDto` envelope, including `className`/`methodName`? | Keep it for consistency with gainsoclock. Note that `className`/`methodName` leak internals to the client — I'd keep them out of error responses in production. | **Kept, and implemented 2026-11-24** — all seven fields plus `isSuccess()`/`isFail()`, for gainsoclock consistency. **The caveat still stands and is not yet addressed:** `className`/`methodName` are populated on every response, including errors, and must be suppressed in production error responses before anything is exposed publicly. |
-| Match gainsoclock's Spring Boot 4.1.2 / Java 17 exactly? | Match Spring Boot 4.1.x. For Java, prefer 21 (LTS, and Boot 4 supports it) unless the server's JDK is 17 — §7 will decide that. | **Java 17 as gainsoclock; Spring Boot 4.2.0, not 4.1.2** — the current latest release, and what Initializr generated. Java 17 because it is the JDK that exists on this machine (§5.1); the server's JDK is still unverified (§7.2), so this may need revisiting. |
+| Keep the `ResponseDto` envelope, including `className`/`methodName`? | Keep it for consistency with gainsoclock. Note that `className`/`methodName` leak internals to the client — I'd keep them out of error responses in production. | **Kept, and implemented 2026-11-24** — all seven fields plus `isSuccess()`/`isFail()`, for gainsoclock consistency. **The caveat still stands, is unaddressed, and its condition has now arrived:** `className`/`methodName` are populated on every response, errors included, and the API became reachable from the public internet on 2026-11-24 (§7.3) — the verified production response names `HealthController` and `healthCheck` in its body. "Before anything is exposed publicly" has passed; tracked as §12 #10. |
+| Match gainsoclock's Spring Boot 4.1.2 / Java 17 exactly? | Match Spring Boot 4.1.x. For Java, prefer 21 (LTS, and Boot 4 supports it) unless the server's JDK is 17 — §7 will decide that. | **Java 17 as gainsoclock; Spring Boot 4.2.0, not 4.1.2** — the current latest release, and what Initializr generated. Java 17 because it is the JDK that exists on this machine (§5.1). **The server's JDK has stopped being a question:** the container image carries its own, so the server needs only Docker (§5.2, §7.3). |
 
 **Open questions on the module structure.** All four only arise if §6.1.1 is
 answered **B**; under the layer-first code that exists today there are no
@@ -715,56 +786,29 @@ MariaDB   ──►  nightly backup, off-machine   [see §10]
 
 ## 7. Environments, hosting, and domain
 
-| | Local | Staging | Production |
+Production exists as of 2026-11-24, and the honest version of the table is
+below. **"Production" here means the skeleton is reachable, not that there is a
+product behind it** — it serves the two health endpoints and nothing else,
+because the application still connects to no database.
+
+| | Local | Staging / prelive | Production |
 |---|---|---|---|
-| Needed? | yes | | |
-| Where it runs | this machine | | |
-| Database | Docker MariaDB | | |
-| URL | `localhost` | | |
+| Needed? | yes | probably, eventually — §12 #11 | yes |
+| Status | working | **not built** | **live since 2026-11-24** |
+| Where it runs | this machine, from `mvnw` or from the container | — | the shared Ubuntu server, in Docker behind the host's nginx |
+| Database | none — the application has no datasource (§5) | — | **none.** Not "not configured": there is no JPA, no driver, no schema in use |
+| URL | `http://localhost:8080`, or `:8088` with the current `.env.dev` | — | `https://resibo-api.polbinsenthabyer.uk` |
+| What it serves | `/api/health/check` and `/actuator/health` | — | the same two endpoints, and nothing else |
 
 | Question | Answer |
 |---|---|
-| Server | Self-hosted on the owner's LAN, Ubuntu. Address, user, and password are in the handover file (§8) — **deliberately not written here, because this repository is public.** |
-| Server OS / specs | Ubuntu (version TBC — needs a shell session to confirm) |
-| How we deploy (git pull + restart / Docker / CI pipeline) | |
-| Domain name | |
-| Cloudflare role: DNS only / proxied / Tunnel / Access in front of admin | |
-| TLS: Cloudflare origin cert / Let's Encrypt | |
-| Who else needs server access | |
-
-### 7.2 Verified infrastructure (checked 2026-11-24)
-
-What was actually tested, not assumed:
-
-| Item | Result |
-|---|---|
-| Server reachable | Yes — ICMP and TCP/22 both open |
-| SSH host key | ED25519, `SHA256:9b3TMT0pLsHF7uuhLHcHvuPilT3l8xDTHlIiKcfZRPc`, recorded in `known_hosts` |
-| SSH auth methods offered | `publickey, password` |
-| SSH login by assistant | **Not yet working.** Password auth needs an interactive terminal, which an agent session does not have. Pending public-key install — see §8. |
-| Database reachable | Yes — TCP/3306 open |
-| Database connection | **Working**, verified with a real query |
-| MariaDB version | 11.8.6-MariaDB-5ubuntu0.1 (Ubuntu) |
-| Server charset / collation | `utf8mb4` / `utf8mb4_uca1400_ai_ci` |
-| `resibo` schema | Exists, and is **empty** — no tables |
-| Shared host | ⚠️ The same MariaDB instance also hosts unrelated databases for other projects |
-| GitHub repository visibility | ⚠️ **Public** — confirmed via the GitHub API |
-
-**Three consequences worth acting on:**
-
-1. **The repository is public.** Everything committed is world-readable, now and
-   in history. No infrastructure addresses, usernames, or internal hostnames go
-   into it — hence the redaction in the table above. Verified 2026-11-24 that no
-   credential value appears in any commit on any branch.
-2. **The database is shared with other projects.** Connecting as `root` means a
-   bug in Resibo can read or destroy unrelated project data. This turns §8's
-   "use a least-privilege app user" from good practice into the actual fix.
-3. **The `resibo` schema is empty**, so there is no legacy structure to work
-   around — the schema in §4 can be designed freely once the blockers are
-   answered.
-
-**Open:** Ubuntu version, JDK available on the server, and whether MariaDB should
-stay shared or get a dedicated instance for Resibo.
+| Server | Self-hosted on the owner's LAN, Ubuntu, shared with the sibling projects. Address, account, and password are in the handover file (§8) — **deliberately not written here, because this repository is public.** |
+| Server OS / specs | Ubuntu (version still unconfirmed — not needed now that the build runs in a container) |
+| How we deploy (git pull + restart / Docker / CI pipeline) | **Docker, manually, from a git checkout on the server.** `git pull` then `scripts/deploy.sh`, which builds the image on the server, restarts, health-gates, and rolls back on failure. No CI pipeline. Full procedure in §7.3. |
+| Domain name | `resibo-api.polbinsenthabyer.uk` — a subdomain of the zone that already serves the sibling projects. No new domain was bought. |
+| Cloudflare role: DNS only / proxied / Tunnel / Access in front of admin | **Proxied DNS over a Cloudflare Tunnel.** The existing `personal-projects` tunnel is reused rather than a new one created; a `CNAME` points the hostname at it. **Access is not in front of anything** — the API is open to the internet, which is tolerable only while it serves health checks. Revisit before the first real endpoint. |
+| TLS: Cloudflare origin cert / Let's Encrypt | **Neither.** TLS terminates at Cloudflare's edge and the tunnel carries the request to the origin, so the origin holds no certificate: nginx listens on plain HTTP on loopback, and the container is published on loopback. Nothing on the LAN speaks TLS and nothing needs to. |
+| Who else needs server access | Open — nobody but the owner today. |
 
 ### 7.1 Branches (decided)
 
@@ -816,6 +860,195 @@ Never force-push. A rejected push is reported, not overridden.
 
 ---
 
+### 7.2 Verified infrastructure (checked 2026-11-24)
+
+What was actually tested, not assumed:
+
+| Item | Result |
+|---|---|
+| Server reachable | Yes — ICMP and TCP/22 both open |
+| SSH host key | ED25519, `SHA256:9b3TMT0pLsHF7uuhLHcHvuPilT3l8xDTHlIiKcfZRPc`, recorded in `known_hosts` |
+| SSH auth methods offered | `publickey, password` |
+| SSH login by assistant | **Working as of 2026-11-24** — the §7.3 deployment was carried out on the server. It was not working when this table was first written: password auth needs an interactive terminal, which an agent session does not have. Key-based access is still the right end state, and the credentials still need rotating (§8.1 risk 1). |
+| Docker and the Compose plugin on the server | Present and working — the image builds there and the container runs (§7.3) |
+| nginx on the server | Present, with a `sites-available` / `sites-enabled` layout; `nginx -t` passed before reload (§7.3) |
+| Cloudflare tunnel `personal-projects` | Healthy, four connections, already fronting the sibling projects before Resibo was added (§7.3) |
+| Database reachable | Yes — TCP/3306 open |
+| Database connection | **Working**, verified with a real query |
+| MariaDB version | 11.8.6-MariaDB-5ubuntu0.1 (Ubuntu) |
+| Server charset / collation | `utf8mb4` / `utf8mb4_uca1400_ai_ci` |
+| `resibo` schema | Exists, and is **empty** — no tables |
+| Shared host | ⚠️ The same MariaDB instance also hosts unrelated databases for other projects |
+| GitHub repository visibility | ⚠️ **Public** — confirmed via the GitHub API |
+
+**Three consequences worth acting on:**
+
+1. **The repository is public.** Everything committed is world-readable, now and
+   in history. No infrastructure addresses, usernames, or internal hostnames go
+   into it — hence the redaction in the table above. Verified 2026-11-24 that no
+   credential value appears in any commit on any branch.
+2. **The database is shared with other projects.** Connecting as `root` means a
+   bug in Resibo can read or destroy unrelated project data. This turns §8's
+   "use a least-privilege app user" from good practice into the actual fix.
+3. **The `resibo` schema is empty**, so there is no legacy structure to work
+   around — the schema in §4 can be designed freely once the blockers are
+   answered.
+
+**Open:** Ubuntu version, and whether MariaDB should stay shared or get a
+dedicated instance for Resibo. The server's JDK is no longer open and no longer
+matters — the container brings its own (§5.2).
+
+### 7.3 Deployment, as it actually works (2026-11-24)
+
+Written down in operational detail because the next person to deploy will be a
+session with no memory of this one, and because one step of it can take the
+neighbouring services down silently.
+
+**What is deployed is the skeleton.** Docker container on the shared Ubuntu
+server, reverse-proxied by the host's nginx, fronted by the Cloudflare tunnel
+that already serves the sibling projects. It answers `/api/health/check` and
+`/actuator/health`. It connects to no database, has no authentication, and
+implements no part of a POS.
+
+#### On the server
+
+| Path or object | What it is |
+|---|---|
+| `/opt/resibo/app` | A git checkout of `dev/api/resibo`. Cloning needed no credential, because the repository is public (§7.2) — the one convenience that awkward fact buys. |
+| `/opt/resibo/resibo.env` | The environment file, mode `0600`, **outside the checkout and not in git**. It holds `APP_ENV=prod` and nothing else today; there is no secret for it to hold yet. |
+| Image `resibo-api:current` | What is running. `:previous` is kept for rollback; `:next` is the staging tag used during a deploy. |
+| Container `resibo-api` | `restart: unless-stopped`, published on `127.0.0.1:8083`, reported `Up (healthy)`. |
+| `/etc/nginx/sites-available/resibo` | The vhost, symlinked into `sites-enabled`. |
+
+The deploying OS account was added to the `docker` group, which takes effect at
+its next login. **This first deployment therefore ran under `sudo`**, and the
+command below keeps the `-E` that carries the exported variables through.
+
+#### Deploying
+
+```sh
+cd /opt/resibo/app
+git pull
+sudo -E bash scripts/deploy.sh
+```
+
+The script refuses to run if the env file named by `RESIBO_ENV_FILE` (default
+`/opt/resibo/resibo.env`) is missing, rather than starting on defaults and
+leaving you to work out why production thinks it is `dev`.
+
+#### What the script does, and how rollback works
+
+`scripts/deploy.sh` is deliberately the same shape as
+`gainsoclock/scripts/deploy.sh` — stage the new build, restart, health-check,
+roll back if it fails — with one substitution: **the artifact kept for rollback
+is an image tag, not `app.jar.previous`.**
+
+1. Build `${IMAGE}:next`. The running container is untouched, so a build failure
+   costs nothing but time.
+2. If `:current` exists, tag it `:previous`. On a first deployment it does not,
+   and the script records that it does not.
+3. Tag `:next` as `:current`.
+4. `docker compose up -d --no-build`.
+5. Poll `http://127.0.0.1:8083/actuator/health` up to **30 times at 2-second
+   intervals** — about a minute, which comfortably covers Spring Boot's start-up.
+6. On success: prune the build-stage images and exit `0`.
+7. On failure: print the last 50 lines of the container log, retag `:previous`
+   back to `:current`, restart, and exit `1`. **If there was no previous image,
+   `compose down` instead** — a failed first deployment leaves nothing running
+   rather than something broken.
+
+To roll back by hand afterwards — the script only rolls back the deploy it is
+running:
+
+```sh
+cd /opt/resibo/app
+docker tag resibo-api:previous resibo-api:current
+RESIBO_TAG=current docker compose up -d --no-build
+```
+
+#### The nginx vhost
+
+Four directives do the work, and they match the pattern the sibling services
+already use — matching it was the point, not a coincidence:
+
+| Directive | Value | Why it matters |
+|---|---|---|
+| `listen` | `127.0.0.1:80` | nginx is not on the LAN either. Only processes on the host — in practice the tunnel daemon — can reach it. |
+| `server_name` | `resibo-api.polbinsenthabyer.uk` | This is how **one** tunnel ingress rule fans out to several applications. |
+| `proxy_pass` | `http://127.0.0.1:8083` | The container's published host port. |
+| `proxy_set_header Host` | `$host` | Without it the upstream sees nginx's own name instead of the requested hostname. |
+
+`nginx -t` passed before the reload. Do that every time; a bad vhost takes down
+every site on the host, not just this one.
+
+#### The Cloudflare tunnel — and the one mistake not to make
+
+The tunnel is named **`personal-projects`**, is healthy on four connections, and
+already fronted gainsoclock, gainsoclock's prelive, the gainsoclock app
+hostnames, and eloms before Resibo existed. Every one of those ingress rules
+points at `http://localhost:80` — that is, at nginx, which sorts them out by
+`server_name`. Resibo joins the identical pattern:
+
+- a new ingress rule, `resibo-api.polbinsenthabyer.uk → http://localhost:80`,
+  **inserted before the catch-all `http_status:404` rule** — a rule placed after
+  the catch-all never matches anything;
+- a proxied DNS record, `CNAME resibo-api → <tunnel-uuid>.cfargotunnel.com`,
+  TTL auto.
+
+> ⚠️ **The tunnel configuration endpoint takes the whole ingress list, not a
+> patch.** A `PUT` carrying only Resibo's rule *replaces* the configuration and
+> silently deletes gainsoclock's, its prelive's and eloms' rules. The tunnel
+> stays healthy, the neighbours start returning 404, and nothing anywhere
+> reports an error — the worst shape an outage can take.
+>
+> **So: read the current configuration, back it up, append to the list, and PUT
+> the complete list with the catch-all last.** That is what was done here; the
+> full prior configuration was saved first and every pre-existing rule was
+> preserved, which is why the neighbour checks below pass.
+
+Access to all of that is a **scoped API token**, inventoried in §8: Account →
+Cloudflare Tunnel:Edit, Zone → DNS:Edit, Zone → Zone:Read, on the one zone and
+no other. The value lives in the handover file and is written nowhere else.
+
+#### Ports on this server
+
+| Host port | Service |
+|---|---|
+| 8081 | gainsoclock |
+| 8082 | gainsoclock prelive |
+| **8083** | **resibo** |
+| 8088 | eloms |
+
+All of them loopback-bound. Two things to keep straight:
+
+- **The container always listens on 8080 internally** (§5.2), whatever the host
+  port. 8083 is purely a host-side mapping, set by `HOST_PORT`.
+- The local `.env.dev` currently sets `SERVER_PORT=8088`, which is **eloms'
+  port on the server**. It is harmless as it stands — nothing reads `.env.dev`
+  on the server, where `HOST_PORT` decides the mapping — but do not copy that
+  value into a server env file, and do not read a local `:8088` as evidence of
+  anything about production.
+
+#### Verified end to end from the public internet
+
+Already verified on 2026-11-24, not inferred:
+
+| Check | Result |
+|---|---|
+| `GET https://resibo-api.polbinsenthabyer.uk/api/health/check` | `200`, envelope intact — `responseType: SUCCESS`, `code: S0001`, `message: "Resibo API is healthy!"`, `data: null`, `className`/`methodName` resolved to `HealthController.healthCheck`. `Server: cloudflare`, `CF-RAY` ending `-MNL`. |
+| `GET https://resibo-api.polbinsenthabyer.uk/actuator/health` | `200` |
+| The container directly, on the server | `200` on `127.0.0.1:8083` |
+| Through nginx by `Host` header, on the server | `200` |
+| gainsoclock API, after the tunnel change | `200` — unaffected |
+| eloms API, after the tunnel change | `401`, which is its normal unauthenticated response — unaffected |
+
+**Two things the deployment did not fix, and was not meant to.** The §10 UTC
+`responseTime` defect is now live in production — the verified response read
+`03:57` where local time was `11:57`. And `className`/`methodName` now leak to
+the public internet, which §6.1.2 said had to stop *before* public exposure
+(§12 #10). Neither is cosmetic; both are recorded rather than quietly patched,
+for the reasons in §13.
+
 ## 8. Credentials and secrets
 
 > **Rule, no exceptions: no secret value is ever written in this file, in the
@@ -843,8 +1076,12 @@ My proposal, to be confirmed:
 - `application-local.yml` and `.env` are git-ignored. A committed `.env.example`
   lists the variable **names** with empty values, so the required set is visible
   without exposing anything.
-- Production values are set on the server as environment variables or Docker
-  secrets — decided in §7.
+- **Decided and in place (§7.3):** production values live in an env file
+  **outside the checkout** on the server — `/opt/resibo/resibo.env`, mode
+  `0600` — named to the container by `RESIBO_ENV_FILE`. Not Docker secrets:
+  there is one host and one container, and a `0600` file is the simpler thing
+  that is no weaker here. `.dockerignore` keeps every `.env*` out of the image
+  so the file is never baked in (§5.2).
 - The database user the application connects as gets **only the grants it needs**.
   It is not `root`.
 - The Cloudflare API token is **scoped to the single zone**, with the narrowest
@@ -870,11 +1107,12 @@ All values supplied so far live in one git-ignored file outside every repository
 | Credential | Purpose | Where the value lives | Status |
 |---|---|---|---|
 | GitHub repository access | push, clone, CI | Git Credential Manager (already working) | ✅ working |
-| Server SSH account | deploy, administer | `resibo.env` → `RESIBO_SERVER_*` | ⚠️ supplied, **login not yet working** (see below) |
+| Server SSH account | deploy, administer | `resibo.env` → `RESIBO_SERVER_*` | ✅ **used successfully** for the §7.3 deployment, 2026-11-24. Key-based access remains the goal, and the value still needs rotating — §8.1 risk 1. |
 | Database admin user (`root`) | currently the only DB access | `resibo.env` → `RESIBO_DB_*` | ✅ **connection verified** 2026-11-24 |
 | Database app user | application connection, least privilege | not created | ❌ **to create — see risk 2 below** |
-| Cloudflare account | DNS, tunnel | OAuth, pending browser authorisation | ⚠️ in progress |
-| Cloudflare API token | unattended/CI use | not created | ❌ not yet needed |
+| Cloudflare API token | DNS records and tunnel configuration | handover file | ✅ **working** 2026-11-24 — created for and used by the §7.3 deployment. **Scoped to** Account → Cloudflare Tunnel:Edit, Zone → DNS:Edit, Zone → Zone:Read, on the one zone and no other. |
+| Cloudflare account | DNS, tunnel | reached through the scoped token above; no interactive login needed | ✅ working |
+| Server application env file | per-environment configuration for the container | `/opt/resibo/resibo.env` on the server, mode `0600`, outside the checkout | ✅ in place — holds `APP_ENV=prod` and nothing else. No secret in it yet, because nothing the application reads is one. |
 | Domain registrar login | domain ownership | | not yet provided |
 | JWT signing key | session tokens | generate per environment | not created |
 | SMTP / email provider | receipts, password reset | | not decided |
@@ -946,8 +1184,8 @@ tax summary for filing · statutory-discount summary.
 |---|---|
 | Acceptable downtime | |
 | Target time to ring up one item (scan or keystroke to line on screen) | |
-| Backup frequency, and where backups are stored | |
-| Has a restore ever been tested? (It is not a backup until it has.) | |
+| Backup frequency, and where backups are stored | **Still open.** Nothing is backed up, and as of 2026-11-24 there is nothing stateful to back up: the deployed application connects to no database, and the only state on the server is a git checkout and a one-line env file (§7.3, §11). This row becomes urgent on the day persistence lands, not after. |
+| Has a restore ever been tested? (It is not a backup until it has.) | No — there is no backup to restore. |
 | How long sales data must be retained | |
 | Interface language(s) | |
 | Currency, date format, timezone | ⚠️ **Open, and already producing a wrong value.** The running API serialises `responseTime` in **UTC** — `03:27:49` where the machine's clock read `11:27:49` (UTC+08:00). `ResponseDto`'s `@JsonFormat` sets no timezone and Spring's Jackson default is UTC, so every timestamp the API returns is eight hours behind local time. A receipt printed from that is simply wrong, and under §2.3 = B a wrong receipt timestamp is a compliance problem, not a cosmetic one. The fix is one property (`spring.jackson.time-zone`) and it was **deliberately not applied**, because picking the timezone is this row's job, not the code's. Answer the row and the fix lands with it. See §12 #8, §13, §5.1. |
@@ -985,6 +1223,30 @@ Of what remains in phase 1, migrations wait on the §4 schema, which waits on th
 §2 blockers; login and roles wait on §1.3. The database connection itself is the
 one piece that could move now.
 
+**Phase 8 is substantially delivered for the API, out of order (2026-11-24).**
+Done and verified in §7.3: the server, a Docker deployment with a health-gated
+restart and a working rollback path, the nginx vhost, a subdomain on the zone
+that already serves the sibling projects, and a public HTTPS URL through the
+existing Cloudflare tunnel. It was taken early precisely because it is the one
+phase that depends on **none** of the open `[BLOCKER]`s — a health endpoint is
+as deployable as a finished POS, and finding out that the nginx-plus-tunnel
+pattern works is far cheaper now than during phase 3.
+
+What phase 8 does **not** yet include, so nobody reads the row as finished:
+
+- **Backups.** Nothing is backed up, and nothing yet needs to be: there is no
+  database connection, and the only state on the server is a git checkout and a
+  one-line env file. The §10 backup rows are still blank, and they become urgent
+  the moment persistence lands — not before, and not after.
+- **Prelive / staging.** Not built. gainsoclock has one on port 8082 and a
+  `deploy-prelive.sh`; Resibo has neither, and whether it should is §12 #11.
+- **CI.** Deployment is manual by design for now. There is no
+  `.github/workflows/maven.yml`.
+- **An application worth deploying.** This is the one that matters. The road to
+  the public internet is now paved and tested; that moves phases 2 through 7 not
+  one step. Every `[BLOCKER]` and the §6.1.1 confirmation are exactly as open as
+  they were the day before the deployment.
+
 **Your changes:**
 
 **Answer:**
@@ -1002,8 +1264,11 @@ one piece that could move now.
 | 5 | Stores and terminals (§2.2) | schema, receipt numbering | 2026-11-24 | open |
 | 6 | Roles and permissions (§1.3) | auth model | 2026-11-24 | open |
 | 7 | Module boundary enforcement (§6.1) | backend skeleton | 2026-11-24 | moot until #9 — the code has no modules to enforce |
-| 8 | Timezone for serialised timestamps (§10) | every API timestamp, receipt times, Z-reading day boundary, and BIR compliance if §2.3 = B | 2026-11-24 | **open — and already wrong in the running code: timestamps come back in UTC (§5.1). Deliberately not fixed; see §13.** |
+| 8 | Timezone for serialised timestamps (§10) | every API timestamp, receipt times, Z-reading day boundary, and BIR compliance if §2.3 = B | 2026-11-24 | **open — and now wrong in public, not just locally.** The production response reads `03:57` where local time is `11:57` (§7.3). Deliberately not fixed; see §13. |
 | 9 | Confirm the layer-first package structure (§6.1.1) | every file path in the backend | 2026-11-24 | **open — but the code already follows option A.** Cheap to reverse while the backend is six classes; expensive once domain code exists. |
+| 10 | Suppress `className` / `methodName` on production responses (§6.1.2) | nothing structural — but it is live internal detail on an open endpoint | 2026-11-24 | **open, and its deadline has passed.** §6.1.2 required both fields gone from production error responses "before anything is exposed publicly"; the API went public on 2026-11-24 (§7.3) and still returns them on every response. The fix is cheap; what needs deciding is whether to suppress by environment or everywhere. |
+| 11 | Is a prelive / staging environment wanted (§7, §7.3)? | `scripts/deploy-prelive.sh`, the `/api/health/check/prelive` variant gainsoclock has, and a fourth host port | 2026-11-24 | open — gainsoclock has one on 8082; Resibo deliberately has none, and nothing yet justifies one. |
+| 12 | Should Cloudflare Access, or any edge authentication, sit in front of this hostname before the first non-health endpoint ships (§7)? | whether the first real endpoint can go live as-is | 2026-11-24 | open — tolerable today only because the API serves health checks and holds no data. Distinct from the §1.3 application auth question; this one is at the edge. |
 
 ---
 
@@ -1034,6 +1299,14 @@ trivia the next session cannot reuse.
 | 2026-11-24 | The Spring Boot parent is `4.2.0`, not Initializr's `4.2.0.RELEASE` | The `.RELEASE` coordinate Initializr's metadata names does not exist in Maven Central — the suffix was dropped years ago — so the generated pom could not resolve its parent at all. Recorded in §5.1 because regenerating will reproduce it. | Claude |
 | 2026-11-24 | The owner's "packaging: yaml" was implemented as YAML configuration with `jar` packaging | Maven packaging admits only `jar` or `war`, so the note cannot have meant Maven packaging. YAML configuration matches gainsoclock, which is the stated reference. Flagged in §5.1 as an assumption awaiting the owner's word, not as a settled decision. | Claude, interpretation — **unconfirmed** |
 | 2026-11-24 | The UTC `responseTime` defect is recorded, not fixed | §10 asks the owner for the project's timezone and has no answer yet. Setting `spring.jackson.time-zone` would be inventing that answer in code, where it is far less visible than an unanswered row in this document — and a timestamp that is quietly eight hours off is worse than one that is loudly unconfigured. The defect is written into §5.1, §10 and §12 #8 instead, and the fix is a one-line property the moment the row is filled. | Claude, per §12 #8 |
+| 2026-11-24 | **The skeleton is deployed to production and made publicly reachable, before a single `[BLOCKER]` is answered** (§7.3) | Owner's request. It is defensible because phase 8 is the only phase that depends on none of the open questions: the deployment path — image, nginx vhost, tunnel ingress, DNS, health gate, rollback — is identical whether the application serves a health check or a finished POS, so building it now costs nothing that the §2 answers can invalidate, and it removes the whole class of "it works locally" surprise from phase 3. The limit is written into the document in several places on purpose: **what is deployed answers health checks and talks to no database.** A deployed skeleton is not progress on the product and must never be reported as such. | Owner, scope limited and recorded by Claude |
+| 2026-11-24 | **The deployment artifact is a Docker image, not a bare JAR** (§5.2) | Owner's instruction — "the gainsoclock pattern, but Docker". It also pays for itself: the build runs inside `eclipse-temurin:17-jdk` through the committed `mvnw`, so the **server needs only Docker** — no JDK to install, no Maven, and no second place where the Java version could drift from the one the project compiles against. The runtime stage is JRE-only with no compiler and no source in it, and the image pins the Java version with the code that needs it rather than relying on whatever the host happens to have. | Owner |
+| 2026-11-24 | **Deployment builds on the server from a git checkout (`/opt/resibo/app`), rather than shipping a built artifact to it** (§7.3) | The repository is public, so the server can clone and pull with no credential at all — no deploy key, no registry login, no token on the server to leak or rotate. There is also no registry to run or pay for, and `git pull` makes "what is deployed" answerable by a command on the server instead of by trust. The cost is accepted knowingly: the server spends a few minutes of CPU on each build, and a build failure is discovered on the server rather than in CI. At this size that is the cheaper trade, and the `dependency:go-offline` cache layer (§5.2) keeps the repeat cost small. Revisit if a CI pipeline ever exists. | Claude |
+| 2026-11-24 | `scripts/deploy.sh` keeps gainsoclock's shape — stage, restart, health-gate, roll back — with **an image tag as the rollback artifact** instead of `app.jar.previous` (§7.3) | Owner asked for the gainsoclock pattern, and the shape is the valuable part: no deployment is considered done until `/actuator/health` answers, and a failed deployment restores the previous build by itself rather than leaving a human to work out what to undo at the worst possible moment. Docker only changes what "the previous build" is stored as — `resibo-api:previous` instead of a renamed jar — which is strictly better, because an image tag carries its dependencies with it. A session reading either project's script should recognise the other. | Owner's pattern, adapted by Claude |
+| 2026-11-24 | **The container and nginx both publish on loopback only; nothing Resibo runs listens on the LAN** (§5.2, §7.3) | The server is shared with unrelated projects and sits on a home network, so the attack surface worth minimising is the LAN, not just the internet. `127.0.0.1:8083:8080` and `listen 127.0.0.1:80` mean the only path in is the Cloudflare tunnel, which is an outbound connection from the host — there is no inbound port to forward, firewall, or forget to firewall. It also makes the public hostname the single front door, so there is exactly one place to put authentication when §12 #12 is answered. | Claude |
+| 2026-11-24 | **The existing `personal-projects` tunnel is reused, with a new subdomain, rather than creating a new tunnel or buying a domain** (§7.3) | That tunnel was already healthy and already fronting the sibling projects through nginx by `server_name`, which is a pattern that works and that the owner already operates. A second tunnel would mean a second `cloudflared` service to keep running, patch, and monitor, for no benefit — one tunnel fans out to any number of hostnames through the one nginx. A subdomain of the existing zone likewise needs no purchase, no new registrar login, and no new TLS story. The cost is shared fate: a mistake in the tunnel configuration affects every project behind it, which is exactly why the next row exists. | Claude |
+| 2026-11-24 | **Tunnel ingress is changed by read, back up, append, then PUT the complete list — never by PUT-ing one rule** (§7.3) | The Cloudflare tunnel configuration endpoint replaces the whole ingress list; it does not patch it. A `PUT` carrying only Resibo's rule would have silently deleted the rules for gainsoclock, its prelive and eloms, and the failure mode is the dangerous one — the tunnel stays healthy, the neighbours start returning 404, and nothing reports an error. So the prior configuration was saved first, the new rule was appended **before** the `http_status:404` catch-all (a rule after the catch-all can never match), and the neighbours were re-checked afterwards. Written into §7.3 as a procedure rather than a note because the next session will not remember it. | Claude |
+| 2026-11-24 | Cloudflare is accessed by a **scoped API token**, recorded in §8 by its scopes and its location only | Per the standing §8 rule: the plan records what a credential is for and where it lives, never its value. The scopes are the part worth writing down, because they are what limits the damage — Account → Cloudflare Tunnel:Edit, Zone → DNS:Edit, Zone → Zone:Read, on the one zone and no other. A token narrow enough to describe in one line is also narrow enough to hand over without auditing. An interactive OAuth login was abandoned in favour of this, because an agent session has no browser and a token can be rotated without one. | Claude, per §8 |
 
 ---
 
@@ -1046,3 +1319,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.3 | Push policy decided (push every commit) and commit-message convention recorded in §7.1. `CLAUDE.md` added to the repository pointing future sessions here. Vault notes created. | Claude |
 | 2026-11-24 | 0.4 | Branch renamed to `dev/api/resibo`. Added §6.1.1 (gainsoclock reference and the layout conflict, as a blocker) and §6.1.2 (adopted conventions). Added §7.2 verified infrastructure: DB connection working, SSH not, repository confirmed public. Rewrote §8 with the handover file location and added §8.1 outstanding security risks. Added `.gitignore`. | Claude |
 | 2026-11-24 | 0.5 | Reconciled the document with the committed scaffold (`2b6dcd6`). **§6.1 rewritten**: it described a `modules/` tree that does not exist, and now states that the code is layer-first (§6.1.1 option A) with the modular monolith kept as the documented alternative; §6.1.1 stays open as a confirmation item. Added §5.1 recording the scaffold, its dependencies, the `4.2.0.RELEASE` / "packaging: yaml" traps, the local toolchain, and the verified build and endpoints. §5's decision column filled in where code decided it and marked open where nothing has (no JPA, no driver, no Flyway, no auth, no frontend). §6.1.2 answers the `ResponseDto` and Boot/Java questions and lists which conventions actually exist. §10 and §12 #8 record the UTC `responseTime` defect; §12 #9 records the structure confirmation; §11 marks phase 1 partially delivered. Six decisions appended to §13, including the structural supersession. | Claude |
+| 2026-11-24 | 0.6 | Recorded the deployment (`c6e826d`). **§7 filled in**: production exists, serves health endpoints only, and the environments table now distinguishes a live production from an unbuilt prelive. Added **§7.3 "Deployment, as it actually works"** — the on-server layout, the deploy command, the rollback mechanism, the nginx vhost directives, the tunnel ingress with the append-don't-overwrite warning, the server port allocation, and the verified public checks. Added **§5.2** for the container runtime (multi-stage build on the committed `mvnw`, JRE-only non-root runtime, loopback-only publishing, capped logs) and two rows to §5's decision table. §7.2 updated: server access, Docker, nginx and the tunnel now verified; the server's JDK is no longer a question. §8 records the Cloudflare token by scope and the server env file by location, and settles how production values are held. §11 marks phase 8 substantially delivered for the API and lists what it does **not** include — backups, prelive, CI, and an application. §12 gains #10 (`className`/`methodName` now leak publicly — the §6.1.2 deadline has passed), #11 (prelive?) and #12 (edge authentication?), and #8 notes the UTC defect is now wrong in public. Corrected two stale §5.1/§6.1.2 claims: `application.yaml` holds five keys including `spring.config.import`, and `.env.example` plus `scripts/deploy.sh` now exist. Eight decisions appended to §13. | Claude |

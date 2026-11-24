@@ -102,13 +102,79 @@ Read it when a task needs it; never echo it back, never commit it, never record
 it in a note. The backend reads secrets from environment variables only — a
 committed `.env.example` lists the names with empty values.
 
+## Deployment
+
+The skeleton is deployed and publicly reachable. **It serves
+`/api/health/check` and `/actuator/health`, connects to no database, and
+implements no part of a POS** — never describe it as more than that, to the
+owner or in a note. Plan §7.3 is the full procedure and §5.2 covers the image;
+this is the short version, so a session does not improvise one.
+
+| | |
+|---|---|
+| Public URL | `https://resibo-api.polbinsenthabyer.uk` |
+| Runtime | Docker container `resibo-api` on the shared Ubuntu server, published on `127.0.0.1:8083` **only** — never on the LAN |
+| In front of it | the host's nginx vhost, matched by `server_name` → the existing `personal-projects` Cloudflare tunnel |
+| Checkout on the server | `/opt/resibo/app`, on `dev/api/resibo` |
+| Env file | `/opt/resibo/resibo.env`, mode `0600`, outside the checkout and not in git |
+
+**To deploy** — manual, on the server. There is no CI pipeline, by choice:
+
+```sh
+cd /opt/resibo/app
+git pull
+sudo -E bash scripts/deploy.sh
+```
+
+The script builds `resibo-api:next`, tags the running `:current` as
+`:previous`, promotes `:next` to `:current`, restarts via Compose, then polls
+`/actuator/health` up to 30 times at 2-second intervals. On failure it prints
+the container log, retags `:previous` back, restarts, and exits non-zero. It
+refuses to run at all if the env file named by `RESIBO_ENV_FILE` is missing.
+**Do not hand-roll a deployment around it** — if it needs to do something
+different, change the script and record why in plan §13.
+
+**To roll back** after the fact (the script only rolls back its own run):
+
+```sh
+cd /opt/resibo/app
+docker tag resibo-api:previous resibo-api:current
+RESIBO_TAG=current docker compose up -d --no-build
+```
+
+**Host ports on that server:** 8081 gainsoclock, 8082 gainsoclock prelive,
+**8083 resibo**, 8088 eloms — all loopback-bound. The container always listens
+on **8080 internally**, whatever the host port is. The local `.env.dev` happens
+to set `SERVER_PORT=8088`, which is eloms' port on the server: harmless
+locally, but never copy that value into a server env file.
+
+> ⚠️ **Cloudflare tunnel configuration: append, never overwrite.** The tunnel
+> configuration endpoint takes the **entire** ingress list and replaces it — it
+> does not patch. A `PUT` carrying only Resibo's rule deletes the rules for
+> gainsoclock, its prelive and eloms; the tunnel stays healthy and the
+> neighbours silently return 404, with no error anywhere to tell you. So
+> always: read the current configuration, **back it up**, append your rule
+> **before** the `http_status:404` catch-all, PUT the complete list, and
+> re-check the neighbouring hostnames afterwards.
+
+Cloudflare access is a scoped API token in the handover file (Account →
+Cloudflare Tunnel:Edit, Zone → DNS:Edit, Zone → Zone:Read). Per the Secrets
+rules above: use it, never echo it, never commit it. The same goes for the
+server's address and account — they belong in the handover file, not in this
+repository.
+
 ## Current state
 
-A skeleton exists and is verified: Spring Boot 4.2.0 on Java 17, Maven,
-the `ResponseDto` conventions, `GET /api/health/check`, `/actuator/health`, and
-two passing tests. There is **no database connection** — the pom has neither JPA
-nor a JDBC driver — and no schema, no migrations, no authentication, and no
-frontend. Plan §5.1 records exactly what was generated and what was verified.
+A skeleton exists, is verified, and is **deployed** (see Deployment above):
+Spring Boot 4.2.0 on Java 17, Maven, the `ResponseDto` conventions,
+`GET /api/health/check`, `/actuator/health`, and two passing tests. There is
+**no database connection** — the pom has neither JPA nor a JDBC driver — and no
+schema, no migrations, no authentication, and no frontend. Plan §5.1 records
+exactly what was generated and what was verified; §5.2 and §7.3 record how it
+builds into a container and how it reaches the internet.
+
+Being deployed unblocks nothing about the product. Every `[BLOCKER]` is as open
+as it was before.
 
 **No JDK is on `PATH` and `JAVA_HOME` is unset. Maven is not installed.** Set
 `JAVA_HOME` in every shell before building, and use the committed wrapper:
@@ -119,15 +185,23 @@ $env:JAVA_HOME = "$env:USERPROFILE\.jdks\ms-17.0.20"   # Microsoft OpenJDK 17.0.
 .\mvnw.cmd spring-boot:run     # run on :8080, override with SERVER_PORT
 ```
 
+`docker compose up --build` is the alternative that needs no `JAVA_HOME` at all
+— the build stage carries its own JDK — and serves on `:8083` locally. It is
+the same image that runs in production.
+
 Everything past the skeleton is still blocked. Generating it was the owner
 lifting the scaffolding hold for one step, not for the project — do not start on
 the schema, auth, or checkout without answers to §1, §2 and §6.1.1.
 
-Two known gaps, so they are not rediscovered as surprises:
+Two known gaps, so they are not rediscovered as surprises. Both are now visible
+on the public internet, which raises the stakes without changing the answer:
 
-- `responseTime` serialises in **UTC**, not local time. **Deliberately not
-  fixed** — the project's timezone is an open owner question (plan §10, §12 #8).
-  Do not "fix" it by guessing a zone; answer the question first.
+- `responseTime` serialises in **UTC**, not local time — the production response
+  reads `03:57` where local time is `11:57`. **Deliberately not fixed:** the
+  project's timezone is an open owner question (plan §10, §12 #8). Do not "fix"
+  it by guessing a zone; answer the question first.
 - `className` and `methodName` are returned on every response, errors included.
-  They leak internals and must be suppressed in production error responses
-  (plan §6.1.2).
+  §6.1.2 required them suppressed in production error responses **before**
+  anything was publicly exposed, and that moment has now passed (plan §12 #10).
+  Raise it with the owner; do not quietly leave it, and do not quietly change
+  the envelope either.
