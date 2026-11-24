@@ -1,6 +1,13 @@
 spring:
   application:
     name: resibo
+  # Loads a per-environment env file from the project root, e.g. .env.dev.
+  # APP_ENV selects which one — set APP_ENV=prod on the server to load .env.prod;
+  # it defaults to dev so a local checkout needs no extra setup.
+  # "optional:" means the app still starts if the file is absent, using the
+  # defaults below. All .env.* files are git-ignored except .env.example.
+  config:
+    import: optional:file:.env.${APP_ENV:dev}[.properties]
 
 server:
   port: ${SERVER_PORT:8080}

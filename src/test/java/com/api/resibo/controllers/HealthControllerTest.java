@@ -23,6 +23,9 @@ class HealthControllerTest {
                 .andExpect(jsonPath("$.responseType").value("SUCCESS"))
                 .andExpect(jsonPath("$.code").value("S0001"))
                 .andExpect(jsonPath("$.message").value(MessageType.API_HEALTH_CHECK))
-                .andExpect(jsonPath("$.responseTime").exists());
+                .andExpect(jsonPath("$.responseTime").exists())
+                // simple name, not the fully-qualified com.api.resibo.controllers.HealthController
+                .andExpect(jsonPath("$.className").value("HealthController"))
+                .andExpect(jsonPath("$.methodName").value("healthCheck"));
     }
 }

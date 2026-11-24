@@ -36,16 +36,22 @@ public class ResponseUtility {
         res.setCode(code);
         res.setMessage(message);
         res.setData(data);
-        res.setClassName(callerFrame().map(StackWalker.StackFrame::getClassName).orElse(null));
-        res.setMethodName(callerFrame().map(StackWalker.StackFrame::getMethodName).orElse(null));
+        Optional<StackWalker.StackFrame> caller = callerFrame();
+        res.setClassName(caller.map(frame -> frame.getDeclaringClass().getSimpleName()).orElse(null));
+        res.setMethodName(caller.map(StackWalker.StackFrame::getMethodName).orElse(null));
         res.setResponseTime(new Date());
         return res;
     }
 
-    /** The first frame outside this class — i.e. whoever asked for the response. */
+    /**
+     * The first frame outside this class — i.e. whoever asked for the response.
+     * RETAIN_CLASS_REFERENCE lets us report the simple class name
+     * ("HealthController") rather than the fully-qualified one, which is what
+     * a caller actually finds useful and leaks less about internal packaging.
+     */
     private static Optional<StackWalker.StackFrame> callerFrame() {
-        return StackWalker.getInstance().walk(frames -> frames
-                .filter(frame -> !ResponseUtility.class.getName().equals(frame.getClassName()))
+        return StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE).walk(frames -> frames
+                .filter(frame -> !ResponseUtility.class.equals(frame.getDeclaringClass()))
                 .findFirst());
     }
 }
