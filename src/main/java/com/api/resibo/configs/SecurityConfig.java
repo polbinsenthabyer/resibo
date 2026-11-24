@@ -79,6 +79,12 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/health/**").permitAll()
+                        // Spring forwards unhandled exceptions to /error. Leaving
+                        // it protected turns every 500 into a 401, which hides the
+                        // real failure and sends you hunting an auth bug that
+                        // does not exist. It leaks nothing: the body is still the
+                        // project's own envelope.
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/employee/**").hasAnyRole("ADMIN", "EMPLOYEE")
                         // Default-deny: anything not named above still needs a

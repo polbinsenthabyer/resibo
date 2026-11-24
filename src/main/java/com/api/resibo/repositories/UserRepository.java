@@ -20,15 +20,31 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query(value = "SELECT * FROM user WHERE username = :username", nativeQuery = true)
     Optional<User> findByUsername(@Param("username") String username);
 
-    /** Returns 1 when the username is taken, 0 otherwise. */
-    @Query(value = "SELECT EXISTS(SELECT 1 FROM user WHERE username = :username)", nativeQuery = true)
-    boolean existsByUsername(@Param("username") String username);
-
     /**
-     * Used only by the first-run bootstrap, to decide whether a signup may
-     * become ADMIN. {@code LIMIT 1} because the question is "is it empty?",
-     * not "how many".
+     * Returns 1 or 0.
+     *
+     * <p>Declared as {@link Integer}, not {@code boolean}, on purpose: MariaDB
+     * answers {@code EXISTS} with an integer, and binding that straight onto a
+     * boolean return throws
+     * {@code ClassCastException: Integer cannot be cast to Boolean} at
+     * runtime — a failure JPQL would never have produced, and one that
+     * surfaces as a confusing 401 rather than an obvious error. The
+     * conversion is done explicitly below.
      */
+    @Query(value = "SELECT EXISTS(SELECT 1 FROM user WHERE username = :username)", nativeQuery = true)
+    Integer countByUsername(@Param("username") String username);
+
+    /** Used only by the first-run bootstrap. Same Integer caveat as above. */
     @Query(value = "SELECT EXISTS(SELECT 1 FROM user LIMIT 1)", nativeQuery = true)
-    boolean anyUserExists();
+    Integer countAnyUser();
+
+    default boolean existsByUsername(String username) {
+        Integer found = countByUsername(username);
+        return found != null && found != 0;
+    }
+
+    default boolean anyUserExists() {
+        Integer found = countAnyUser();
+        return found != null && found != 0;
+    }
 }
