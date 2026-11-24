@@ -55,11 +55,45 @@ Two of them govern the whole design:
 | Branch | Contents |
 |---|---|
 | `main` | `README.md` only. Never application code. |
-| `dev/api/resibo` | Everything else. **All work commits directly here.** |
+| `dev/api/resibo` | The backend, this file, and the plan. **Backend work commits directly here.** |
+| `dev/app/resibo` | The React client at `src/main/client`, on top of a full copy of the backend. **Frontend work commits directly here.** Cut from `dev/api/resibo` at `e125c6e`, 2026-11-24. |
 
-Commit straight to `dev/api/resibo` — no feature branches, no pull requests — and
-push every commit. Touch `main` only to update the README. Keep commit messages
-brief and precise; Conventional Commits, imperative mood.
+Commit straight to the branch for the half you are changing — no feature
+branches, no pull requests — and push every commit. Touch `main` only to update
+the README. Keep commit messages brief and precise; Conventional Commits,
+imperative mood.
+
+> ⚠️ **This file and `resibo-plan.md` exist on both development branches, and
+> nothing keeps the copies in step.** It has already caused one rework: the
+> frontend branch was cut at `4883414`, two documentation commits landed on
+> `dev/api/resibo` while the client was being written, and the frontend's plan
+> section had to be renumbered before it could be committed. **Fetch and rebase
+> `dev/app/resibo` onto `dev/api/resibo` before every frontend commit**, and if
+> you change either document, say so in the commit message. Plan §12 #23.
+
+## The frontend
+
+`src/main/client` on `dev/app/resibo` — Vite, React, TypeScript, plain SCSS.
+Conventions are in `src/main/client/README.md`; the write-up with its reasoning
+is plan §5.6.
+
+Two things about the location that must stay true:
+
+- **Maven ignores it.** Only `src/main/java` and `src/main/resources` are build
+  inputs, so `src/main/client` is invisible to `./mvnw`. Verified by compiling.
+- **`.dockerignore` excludes `src/main/client/`. Do not remove that rule.** The
+  `Dockerfile` does `COPY src/ src/`, so without it every backend build drags
+  `node_modules` into the build context and busts its dependency cache layer.
+
+The client has **one** place that calls `fetch` — `src/api/http.ts` — because
+this API answers a failed request with HTTP 200 and an error code in the
+envelope, and only uses a real status for 401 and 403. It unwraps `data` or
+throws `ApiError`. **Do not call `fetch` from a component**, and do not add a
+second HTTP path.
+
+Nothing builds or deploys the client: no CI step, no vhost, no hostname
+(plan §12 #22). There is no login screen, no formatting helper for money or
+dates — §10 is still blank — and no test runner.
 
 ## Architecture
 
@@ -393,6 +427,17 @@ $env:JAVA_HOME = "$env:USERPROFILE\.jdks\ms-17.0.20"   # Microsoft OpenJDK 17.0.
 `docker compose up --build` is the alternative that needs no `JAVA_HOME` at all
 — the build stage carries its own JDK — and serves on `:8083` locally. It is
 the same image that runs in production.
+
+The frontend is a separate toolchain and needs no `JAVA_HOME`. Node 26 and npm
+are on `PATH`:
+
+```powershell
+cd src\main\client
+npm install
+npm run dev        # :5173, proxies /api to :8083 — so run the backend too
+npm run build      # tsc -b, then vite build into dist/
+npm run lint       # oxlint, not ESLint
+```
 
 **The checkout is still blocked.** The scaffold, the database connection, the
 product table and authentication were each the owner lifting their own hold for

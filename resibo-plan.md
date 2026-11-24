@@ -67,15 +67,15 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.8 — authentication recorded; scope still unfilled |
+| Document version | 0.9 — frontend client recorded; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-24 |
-| Last updated by | Claude (recorded JWT authentication, the `user` and `user_role` tables, and the move of products behind ADMIN) |
-| Plan status | **AWAITING OWNER INPUT** — the API is deployed, publicly reachable (§7.3), authenticated (§5.4) and serves an admin-only product catalog, but there is no checkout and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
-| Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` |
+| Last updated by | Claude (recorded the React client at `src/main/client` and the `dev/app/resibo` branch) |
+| Plan status | **AWAITING OWNER INPUT** — the API is deployed, publicly reachable (§7.3), authenticated (§5.4) and serves an admin-only product catalog, and a React client is scaffolded (§5.6). There is still no checkout, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
+| Working copy | Two checkouts of the same repository, one per branch — `%USERPROFILE%\sprintify_solutions\personal\resibo` on `dev/api/resibo`, and `%USERPROFILE%\sprintify_solutions\personal\app\resibo` on `dev/app/resibo`. Mirrors gainsoclock’s layout. |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
 | Production URL | `https://resibo-api.polbinsenthabyer.uk` — health, auth, and admin-only products; see §7.3 |
-| This document lives on | branch `dev/api/resibo` — see §7.1 |
+| This document lives on | branch `dev/api/resibo`, and on `dev/app/resibo` which was cut from it — see §7.1. **An edit made on the frontend branch has to reach `dev/api/resibo` as well, or the two copies drift — see §12 #23.** |
 | Vault notes | `Obsidian Vault/Projects/personal/resibo/` |
 
 ---
@@ -384,15 +384,15 @@ a choice has been made in code, and says **open** where nothing has been chosen.
 | Persistence | Spring Data JPA, with plain SQL where reporting needs it | **Spring Data JPA — in use** (§5.3), with the MariaDB driver at `runtime` scope. Three entities and three repositories now exist, and on the owner's instruction **every repository query is native SQL** — see §5.5 for the two rules that follow from that. |
 | Auth | Short-lived JWT access token + refresh; roles from §1.3 | **JWT — in use** (§5.4). Spring Security, HS256, an 8-hour token, two roles (ADMIN, EMPLOYEE), and default-deny on any endpoint without an explicit rule. **No refresh token, no logout and no revocation** (§12 #18). The two roles are a working minimum, not an answer to §1.3. |
 | Password hashing | BCrypt | **BCrypt — in use** (§5.4), `BCryptPasswordEncoder` at its default strength. The `password` column holds a hash and never a plaintext password. |
-| Frontend build | Vite | **Open** — no frontend code exists. |
-| Frontend language | TypeScript | **Open** |
-| Server state | TanStack Query | **Open** |
-| UI components | shadcn/ui on Tailwind | **Open** |
-| Routing | React Router | **Open** |
+| Frontend build | Vite | **Vite 8 — in use** (§5.6), at `src/main/client` on branch `dev/app/resibo`. |
+| Frontend language | TypeScript | **TypeScript 7 — in use**, with `strict`, `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` (§5.6). |
+| Server state | TanStack Query | **Open, and deliberately not adopted.** The client has a small `useAsync` hook instead — no cache, no deduplication, no revalidation. That is the right size for one health call and the wrong size for a catalog; adopt TanStack Query when a screen needs it rather than growing the hook. |
+| UI components | shadcn/ui on Tailwind | **Diverged from the recommendation, by the owner’s choice: plain SCSS.** Design tokens as CSS custom properties, a small reset, one CSS Module per component (§5.6). No Tailwind and no component library. A kit could still be added, but it would sit on top of this rather than replace it. |
+| Routing | React Router | **React Router 7 — in use** (§5.6), one route table at `src/app/router.tsx`. |
 | Backend tests | JUnit 5 + Testcontainers against real MariaDB | **JUnit 5 in use** (`spring-boot-starter-webmvc-test`, `spring-boot-starter-actuator-test`, `spring-boot-starter-data-jpa-test`, `spring-boot-starter-security-test`), **22 tests** as of 2026-11-24. **Testcontainers still open — and it stopped being academic**: the context test now needs a datasource, CI supplies a throwaway one (§5.3), but a local `mvnw verify` loads `.env.dev` and therefore connects to the **shared production database**, which now has real rows in it. §12 #13. |
-| Frontend tests | Vitest + React Testing Library; Playwright for checkout | **Open** |
+| Frontend tests | Vitest + React Testing Library; Playwright for checkout | **Open** — no test runner is installed in the client. |
 | Local database | Docker Compose for MariaDB | **Decided by default, and not well.** `.env.dev` points local runs *and local tests* at the shared MariaDB on the server, because that is the database that exists. A local container or Testcontainers would isolate it; neither is in place. **That schema is no longer empty**, so this has stopped being harmless. §12 #13. |
-| Repo layout | One repo: `backend/` and `frontend/` | **Diverged.** The backend was scaffolded at the **repository root** — `pom.xml` and `src/` are top-level, there is no `backend/`. Where the frontend lives is therefore open again; see §5.1. |
+| Repo layout | One repo: `backend/` and `frontend/` | **Diverged, and now settled.** The backend is at the **repository root** — `pom.xml` and `src/` are top-level, there is no `backend/`. The frontend is at **`src/main/client`**, on its own branch `dev/app/resibo`. Decided by the owner, 2026-11-24, after the alternatives were laid out; see §5.6 and §13. |
 
 **Accept all recommendations, or state your changes:**
 
@@ -1063,6 +1063,121 @@ so the filters cannot be used to inject SQL.
 
 ---
 
+### 5.6 The frontend client (2026-11-24)
+
+A React application scaffolded with Vite, living at **`src/main/client`** on
+branch **`dev/app/resibo`**. It renders, builds, type-checks and lints, and it
+talks to the API's health endpoint. **It is not a POS screen and not a login
+screen.**
+
+| Field | Value |
+|---|---|
+| Location | `src/main/client` — inside the Maven source root, invisible to the Maven build |
+| Branch | `dev/app/resibo`, cut from `dev/api/resibo` at `e125c6e` |
+| Scaffolded with | `npm create vite@latest` — create-vite 9.3.4, template `react-ts` |
+| Vite / React | Vite **8.3.8** · React **19.3.1** |
+| Language | TypeScript **7.0.2** with `strict`, plus `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` and `noImplicitOverride` |
+| Styling | plain **SCSS** (`sass` 1.108) — tokens as CSS custom properties, one CSS Module per component |
+| Routing | **React Router 7.18**, one route table at `src/app/router.tsx` |
+| Linting / formatting | **oxlint** 1.95 — create-vite's default now, not ESLint — and **Prettier** 3.10 |
+| Dev server | `localhost:5173`, proxying `/api` to `localhost:8083` |
+| Added to the template | `react-router-dom`; dev-only `sass` and `prettier`. Nothing else. |
+
+#### Where it lives, and why that was a decision
+
+The owner chose `src/main/client` from three options laid out first: the
+industry-common monorepo (a `frontend/` directory beside `pom.xml` on one
+branch), a separate branch cut from `main` with the client at the repository
+root — which is what [gainsoclock] does — or nesting it under `src/main`.
+
+What makes the chosen location safe, and must stay true:
+
+- **Maven ignores it.** Only `src/main/java` and `src/main/resources` are build
+  inputs. Verified: `./mvnw -B clean compile` compiles 32 sources, copies one
+  resource from `src/main/resources`, and never reads `src/main/client`.
+- **`.dockerignore` excludes `src/main/client/` outright.** The `Dockerfile`
+  does `COPY src/ src/`, so without that rule every backend image build would
+  pull `node_modules` into the build context and bust its dependency cache
+  layer on every frontend commit. That is the one real cost of this location,
+  and it is paid once, here.
+
+What it costs, recorded so nobody rediscovers it as a surprise: the frontend
+sits on a different branch from the backend, so **no commit can change an
+endpoint and its caller together.** That is not hypothetical —
+`LoginResponseDto` lost its `expiresInSeconds` field in `4883414`. The contract
+has to be held somewhere both branches answer to, and today that is the Postman
+`RESIBO` collection.
+
+#### Structure
+
+Feature-first, with shared layers underneath:
+
+```
+src/main/client/src/
+├── main.tsx              entry: mounts App, loads the one global stylesheet
+├── App.tsx               app-wide providers (router today)
+├── app/                  routing — route table and path constants
+├── api/                  the HTTP layer; the only place that calls fetch
+├── features/<name>/      a feature owns its api, types, hooks, components, pages
+├── components/           shared, presentational, feature-agnostic
+├── layouts/              page chrome with an <Outlet />
+├── hooks/  lib/          shared hooks and framework-free helpers
+├── pages/                pages belonging to no feature (404)
+└── styles/               global only: tokens, reset, element defaults
+```
+
+**The import rule that keeps it honest:** a feature may import from `api/`,
+`components/`, `hooks/`, `lib/` and `styles/`. **A feature must not import from
+another feature.** When two features need the same thing it moves *down* into a
+shared layer, never sideways. Nothing enforces this mechanically — the same
+situation as §6.1 on the backend, and the same honest caveat.
+
+#### The API layer is the part worth reviewing
+
+`src/api/http.ts` is the only place in the client that calls `fetch`, because
+this API's contract needs translating in exactly one place:
+
+- **A failed request normally returns HTTP 200.** Business failures arrive as
+  `responseType: 'ERROR'` with a code (`E0103`, `E0106`) in the envelope.
+- **401 and 403 are the only real error statuses** (§5.4), and they carry the
+  envelope too.
+- So `http` unwraps `data` on success and throws a single `ApiError` on failure,
+  exposing `isUnauthenticated` / `isForbidden` for the two cases where the
+  difference matters. A caller never sees the envelope and never branches on a
+  status code.
+
+`src/api/types.ts` mirrors `ResponseDto` and `PageDto` field for field, and
+flags the two envelope fields that are defects rather than features:
+`responseTime` is UTC (§12 #8), and `className` / `methodName` are internal
+detail on a public response (§12 #10).
+
+#### Deliberately not built
+
+- **No login screen**, though `features/auth` types and calls both endpoints.
+  What each role must *not* be able to do is §1.3, unanswered.
+- **No money or date formatting.** Currency, date format and timezone are blank
+  in §10, and `responseTime` serialises in UTC. A formatter would have had to
+  guess, and a POS prints those values on receipts — so `features/products`
+  documents that totals must not be computed client-side instead of shipping a
+  helper that quietly does it.
+- **No tests and no test runner.** §5 proposes Vitest; nothing is installed.
+- **No state or data-fetching library.** A small `useAsync` hook covers one
+  health call.
+- **No deployment path of any kind** — no CI build step, no nginx vhost, no
+  hostname, no container. See §12 #22.
+
+#### Verified
+
+| What | Result |
+|---|---|
+| `npm run build` (`tsc -b && vite build`) | **passes** — 47 modules, 317 kB JS, 3.5 kB CSS |
+| `npm run lint` (oxlint) | **clean**, no warnings |
+| `npx prettier --check` | clean |
+| `./mvnw -B clean compile` after the client landed | **BUILD SUCCESS**, 32 sources, `src/main/client` untouched |
+| Against a running API | **not verified.** `npm run dev` was not run in this session, so the health page has never been loaded in a browser against the backend. |
+
+---
+
 ## 6. Architecture
 
 ### 6.1 Backend structure — layer-first in the code, modular monolith deferred
@@ -1350,6 +1465,7 @@ behind it** — it serves health, auth, and an admin-only product catalog (§5.4
 |---|---|
 | `main` | `README.md` only — the public face of the repository |
 | `dev/api/resibo` | backend development branch; carries `README.md`, `CLAUDE.md` **and** this plan |
+| `dev/app/resibo` | frontend development branch, created 2026-11-24 from `dev/api/resibo` at `e125c6e`. Carries the whole backend **plus** the React client at `src/main/client` (§5.6). |
 
 Remote: `https://github.com/polbinsenthabyer/resibo.git` — **public** (see §7.2).
 
@@ -1377,8 +1493,30 @@ Consequences, so no session is surprised by them:
   does not receive application code. The only commits `main` ever gets are README
   updates.
 
-So the standing instruction for every session is: **work on `dev/api/resibo`.** Touch
-`main` only to update the README, and then only the README.
+**Amended 2026-11-24, when the frontend branch was created.** The standing
+instruction is now: **backend work on `dev/api/resibo`, frontend work on
+`dev/app/resibo`.** `main` still receives only README changes.
+
+Because `dev/app/resibo` was cut *from* `dev/api/resibo` rather than from
+`main`, it carries a complete copy of the backend, this plan and `CLAUDE.md`.
+Two consequences, and the second one is a trap:
+
+- A session in the frontend checkout has this plan and the project instructions
+  in front of it. That is the reason the branch was cut from here rather than
+  from `main`, which holds only the README.
+- **There are now two copies of this document on two branches, and nothing keeps
+  them in step.** It bit on the very first frontend commit: the branch was cut
+  at `4883414`, and `0135659` and `e125c6e` landed on the backend branch while
+  the client was being written, so §5.4, §5.5 and §12 #17–19 appeared
+  underneath it. **Rebase `dev/app/resibo` onto `dev/api/resibo` before every
+  frontend commit** — that is now the expected step, and §12 #23 tracks the
+  wider question.
+
+On disk the two branches are two separate clones, following gainsoclock's
+layout — `personal/resibo` for the API branch, `personal/app/resibo` for the
+app branch (§0). They are independent clones rather than `git worktree`s, so
+each fetches on its own, and one can be several commits behind the other
+without anything saying so.
 
 **Push policy (decided by owner, 2026-11-24):** push to the remote. Sessions do
 not need to ask first.
@@ -1916,6 +2054,8 @@ What phase 8 does **not** yet include, so nobody reads the row as finished:
 | 19 | **CORS is open to all origins** (§5.4) | nothing today; a browser-based attack surface the moment there is a frontend and real data | 2026-11-24 | open, deliberately. `allowedOriginPatterns` is `*` so frontend work is not blocked, with `allowCredentials=false` limiting what that can be abused for. Replace `*` with the real frontend origins before this API holds live data. Needs the frontend's hostname, which §5 has not decided. |
 | 20 | **`JWT_SECRET` is missing from `.env.example` and from the CI `build` job** (§5.1, §5.4) | a fresh checkout, and the CI test gate | 2026-11-24 | open, and it looks like an oversight rather than a decision. `jwt.secret` has no default and `ResiboApplicationTests` starts the full context, so a checkout that copies the committed template cannot start the application, and CI sets the datasource keys but no signing key. Both are one line each. Needs confirming against an actual CI run before anyone trusts the gate. |
 | 21 | **Is "every repository query is native SQL" a rule or a starting point?** (§5.5) | every repository written from here on | 2026-11-24 | open. It is the owner's instruction and is followed everywhere today. It has already cost one runtime bug (the `Integer` `EXISTS` trap), needs an explicit `countQuery` on every paginated query, and needs a field-to-column map for every sortable listing. Worth confirming it is wanted for simple lookups too, rather than only where JPQL fights the query. |
+| 22 | **How does the frontend get built and deployed?** The client exists (§5.6) and nothing ships it: no CI build step, no nginx vhost, no hostname, no container, and no decision on whether the SPA is served by nginx as static files or packaged into the Spring Boot jar's `static/` | the first time anyone other than a developer needs to see a screen | 2026-11-24 | open. Not urgent — there is one page and it says "the API answered". Worth deciding before a second page exists, because serving it from the jar would pull the client into the Maven build and change `src/main/client`'s relationship to it. |
+| 23 | **Two branches now carry a copy of this plan, and nothing keeps them in step.** `dev/app/resibo` was cut from `dev/api/resibo`, so `resibo-plan.md` and `CLAUDE.md` exist on both (§7.1) | the credibility of the declared source of truth | 2026-11-24 | **open, and it has already bitten once.** The frontend session branched at `4883414`, wrote up its work, and meanwhile `0135659` and `e125c6e` landed on `dev/api/resibo` with a full documentation pass — so §5.4, §5.5 and §12 #17–19 all appeared underneath it and the frontend branch had to be rebased and its section renumbered before committing. Options: carry documentation edits across by hand, keep the plan authoritative only on `dev/api/resibo` and accept the frontend copy going stale, or merge `dev/api/resibo` into `dev/app/resibo` before every frontend commit. The last one is what was actually done this time. |
 
 ---
 
@@ -1976,6 +2116,12 @@ trivia the next session cannot reuse.
 | 2026-11-24 | **`created_by` and `updated_by` record the signed-in username instead of the literal `manual`** (§5.4) | The columns existed from the first table and were being filled with a placeholder, which made them decoration. With authentication there is an actual actor to record, and audit columns that name a person are the difference between an audit trail and four unused columns — which matters under §2.3 if Resibo ever issues official receipts. `SecurityUtil.currentUsername()` still falls back to `manual` when nobody is authenticated; with the current rules that means only the public signup path. | Claude |
 | 2026-11-24 | **`UserUtility` returns entities rather than `ResponseDto`, and its existence checks actually check** (§6.1.2) | Modelled on gainsoclock's utility of the same name, with the parts that do not survive review left out. Returning `ResponseDto` from a lookup helper forces every caller to unwrap a response envelope to get at an entity, so building the response stays the service's job. It returns `null` for a missing role row instead of throwing, because a missing row means the schema was not fully applied — an operator problem the service should log and report, not a crash. And gainsoclock's `isUserExistById` tests an object that is never null, so it always returns `true`; copying that would have imported a bug that never fails loudly. | Claude |
 | 2026-11-24 | **The product catalog shipped before §3 and §4 were answered, as an admin surface only** | Recorded because it is a departure from "no code past a blocker". A product with a name, a price and a stock count is the smallest thing that could be built, and it was built to have something real behind authentication rather than to settle the catalog: there are no variants, no barcodes, no price lists and no tax fields, all of which §3 and §4 still own. The listing endpoint is a `POST` despite being a read, because the filter and pagination payload belongs in a body and a `GET` body is not reliably carried by proxies and clients — gainsoclock pairs `GET` with `@RequestBody`, which works until something in the path drops it. If §1.2 comes back as a business that needs variants or batches, this table is expected to be replaced rather than extended. | Claude |
+| 2026-11-24 | **The frontend lives at `src/main/client`, on its own branch `dev/app/resibo` cut from `dev/api/resibo`** (§5.6, §7.1) | Owner's choice, made after three options were laid out: a `frontend/` directory beside `pom.xml` on one branch (the common industry layout, and the only one that allows an atomic full-stack commit), a branch cut from `main` with the client at the repository root (what gainsoclock does), or nesting under `src/main`. The chosen location is safe because Maven reads only `src/main/java` and `src/main/resources` — verified by compiling — and because `.dockerignore` now excludes the directory, so the Java image never carries `node_modules`. Cutting the branch from `dev/api/resibo` rather than `main` was deliberate: it puts this plan and `CLAUDE.md` in front of a session working in the frontend checkout. | Owner, options and consequences by Claude |
+| 2026-11-24 | **Plain SCSS: no Tailwind and no component library** (§5, §5.6) | Owner's instruction. Design tokens are CSS custom properties on `:root` rather than Sass variables, so a theme or a high-contrast mode for a till screen can change them at runtime instead of requiring a rebuild; breakpoints stay Sass variables, because a media query cannot read a custom property. Component styles are CSS Modules sitting next to their component, so a class name cannot leak out of the component that owns it. A component kit can still be added later, on top of this rather than instead of it. | Owner, structure by Claude |
+| 2026-11-24 | **The client has exactly one place that calls `fetch`** — `src/api/http.ts` — and it throws `ApiError` rather than handing the envelope to callers (§5.6) | The API reports business failures with HTTP 200 and `responseType: 'ERROR'`, and uses a real error status only for 401 and 403 (§5.4). A component that calls `fetch` directly has to know that, and the first one to forget will read a failure as a success. Translating the contract in one place means callers get either `data` or an exception, which is the normal shape for the rest of the language. | Claude |
+| 2026-11-24 | **No currency, date or timezone formatting helper was written for the client** (§5.6, §10) | §10 is blank and §12 #8 is open: `responseTime` serialises in UTC, and currency and date format have never been chosen. Any formatter would have had to pick those values, and a POS prints them on receipts — possibly BIR-registered ones. Writing none leaves the gap visible; writing one would have buried a guess in a utility that every screen then depends on. The product types document that totals must not be computed client-side, for the same reason. | Claude, per the standing rule not to guess past a blocker |
+| 2026-11-24 | **The bearer token is kept in `localStorage`, recorded as provisional rather than settled** (§5.6) | It is what a stateless `Authorization: Bearer` API makes easy, and the backend is deliberately stateless with no session cookie (§5.4). The cost is real: any XSS on the origin can read the token, and there is no revocation (§12 #18), so a stolen token is good for its full eight hours. The alternative — an httpOnly cookie — needs the backend to set it and brings CSRF back with it. Recorded here so that it is a known trade to revisit alongside §1.3, rather than an accident of scaffolding. | Claude |
+| 2026-11-24 | **The frontend branch is rebased onto `dev/api/resibo` before committing, rather than left to diverge** (§7.1, §12 #23) | Forced by what happened on the first frontend commit: the branch was cut at `4883414`, and `0135659` and `e125c6e` landed on the backend branch while the client was being written — adding §5.4, §5.5 and §12 #17–19. Committing without rebasing would have produced two different documents both calling themselves version 0.8, with two different §5.4s. Rebasing first is the cheapest way to keep one plan rather than two, and it is now the expected step before any frontend commit. | Claude |
 
 ---
 
@@ -1991,3 +2137,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.6 | Recorded the deployment (`c6e826d`). **§7 filled in**: production exists, serves health endpoints only, and the environments table now distinguishes a live production from an unbuilt prelive. Added **§7.3 "Deployment, as it actually works"** — the on-server layout, the deploy command, the rollback mechanism, the nginx vhost directives, the tunnel ingress with the append-don't-overwrite warning, the server port allocation, and the verified public checks. Added **§5.2** for the container runtime (multi-stage build on the committed `mvnw`, JRE-only non-root runtime, loopback-only publishing, capped logs) and two rows to §5's decision table. §7.2 updated: server access, Docker, nginx and the tunnel now verified; the server's JDK is no longer a question. §8 records the Cloudflare token by scope and the server env file by location, and settles how production values are held. §11 marks phase 8 substantially delivered for the API and lists what it does **not** include — backups, prelive, CI, and an application. §12 gains #10 (`className`/`methodName` now leak publicly — the §6.1.2 deadline has passed), #11 (prelive?) and #12 (edge authentication?), and #8 notes the UTC defect is now wrong in public. Corrected two stale §5.1/§6.1.2 claims: `application.yaml` holds five keys including `spring.config.import`, and `.env.example` plus `scripts/deploy.sh` now exist. Eight decisions appended to §13. | Claude |
 | 2026-11-24 | 0.7 | Recorded the database integration (`9b57c2b`, docs note `bfafb3a`). Added **§5.3 "The database connection"** — the three new dependencies and why the driver is `runtime` scope, the datasource block key by key, **`ddl-auto: none` with its audit-trail reasoning and a hard rule against ever relaxing it**, `open-in-view: false`, the auto-detected `MariaDBDialect`, the five environment keys (matching gainsoclock's names) and where their values live, the local port move from 8088 to 8083, the **least-privilege `resibo` account** with its probed isolation, the **CI MariaDB service container** and why its credentials are not GitHub Secrets, and what was verified. §5's decision table updated: persistence is JPA **in use**, migrations are now the gap that matters, Testcontainers moved from academic to needed. §5.1 gains the three dependencies and a corrected description of `application.yaml` and the env files — `.env.dev` now holds a real credential. §5.2's `extra_hosts` note is no longer hypothetical. §7's environments table gains a **CI** column and states what each environment's database actually is; §7.2 records the new account and the 10 production connections as `resibo`; §7.3 records the env file's new contents and **rewrites the 8088 trap as resolved**. §8's inventory now distinguishes the retired superuser from the application account and adds the local and CI env files; **§8.1 risk 2 is marked RESOLVED** with what was done and what remains, risk 3 is narrowed to the administrative credentials, and a new risk 5 records that local tests reach the shared instance. §10's backup row and §11's phase notes corrected. §12 gains #13 (local tests hit the shared production database), #14 (narrow the account's `%` host), #15 (nothing owns the schema) and #16 (the undocumented CI `deploy` job). Eight decisions appended to §13. **Throughout: "connected to the database" is stated as plumbing, never as persistence — there are still no entities, no repositories and no tables.** | Claude |
 | 2026-11-24 | 0.8 | Recorded authentication (`54c5e21`, `963c737`, `d30000f`, `8b57196`). Added **§5.4 "Authentication and security"** — the five new dependencies and why jjwt is 0.13 and not gainsoclock's 0.11.5, the `user_role` and `user` tables with their apply order and seeded roles, the full access-rules table with its default-deny ending, the two real HTTP error statuses, the signing key and its no-default and 32-character rules, the role model, **the public-signup bootstrap with its warning**, the new `E01xx` error codes and why `E0106` covers three failures, CORS, the move of products behind ADMIN with the `Admin<Name>Controller` naming rule, **three traps** (native `EXISTS` returns `Integer`, `/error` must be permitted, Boot 4 uses Jackson 3), and what was verified against the live public API. Added **§5.5 "Repositories are native SQL"** — `countQuery`, column-name sorting via `SORT_COLUMNS`, and the collation that makes `LOWER()` unnecessary. §5's decision table: auth is **JWT in use**, a password-hashing row added, persistence and migrations rows corrected, tests now 22. §5.1 gains the five dependencies, the `jwt` block, the seven env keys, **the full eight-endpoint API surface**, and a note that `.env.example` and CI are both missing `JWT_SECRET`. §6.1's tree redrawn (around thirty classes, not six) and **the "reversal is cheap" claim withdrawn** in §6.1, §6.1.1 and §12 #9. §6.1.2 records the `Admin<Name>Controller` rule, that almost every gainsoclock convention now exists, and the deliberate `UserUtility` divergence. §4 notes that three of its rows now exist in the database ahead of the section being answered. §7's environments table, §7.2 and §7.3 corrected — three tables, eight endpoints, `JWT_SECRET` in the server env file, and edge authentication reframed as hardening. §8 settles how the signing key is held and adds two inventory rows (the JWT key, and the exposed application admin account — **username only, never the password**). §8.1: risk 1 extended to the admin account, risk 5 corrected now that tables exist, and **new risk 6 for the signup bootstrap**, which replaces the old "the whole API is open" exposure. §10's backup rows and §11's phase notes corrected — phase 1 is substantially delivered and phase 2 partly, and backups are now a real gap. §12 gains #17 (should signup stay public), #18 (no refresh or revocation), #19 (CORS is open), #20 (`JWT_SECRET` missing from `.env.example` and CI) and #21 (is native-SQL-everywhere a rule), with #6, #9, #12, #13 and #15 restated against what now exists. Fifteen decisions appended to §13. **No secret value, server address or OS account name appears anywhere in this document.** | Claude |
+| 2026-11-24 | 0.9 | Recorded the **React client** (§5.6): its location at `src/main/client`, the new branch `dev/app/resibo`, the versions actually installed (Vite 8, React 19, TypeScript 7, React Router 7, sass, oxlint, Prettier), the folder structure and its one import rule, the API layer and why it exists, what was deliberately **not** built (no login screen, no formatting helpers, no tests, no state library, no deployment path), and what was verified — including that `./mvnw clean compile` is unaffected and that the client has **never been run against the live API**. §5's six frontend rows updated from "Open" to what is in use, and the "Repo layout" row settled. §7.1 gains the `dev/app/resibo` row, the amended standing instruction, and the warning that two branches now carry this document. §12 gains **#22** (nothing builds or deploys the frontend) and **#23** (two copies of this plan, which already bit once — this version was written on a branch cut before 0.8 landed and had to be rebased and renumbered). Six decisions appended to §13. | Claude |
