@@ -12,6 +12,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -82,6 +83,71 @@ class ProductServiceImplTest {
         dto.setProductName("Coffee");
         dto.setProductRemainingStocks(-1);
         assertThat(service.setProduct(dto).getCode()).isEqualTo("E0006");
+    }
+
+    // --- setProduct: name uniqueness --------------------------------------
+
+    @Test
+    void setRejectsCreateWhenTheNameIsTaken() {
+        Product existing = new Product();
+        existing.setId(1L);
+        existing.setProductName("Coffee");
+        when(productRepository.findByProductName("Coffee")).thenReturn(Optional.of(existing));
+
+        ProductDto dto = new ProductDto();
+        dto.setProductName("Coffee");
+
+        assertThat(service.setProduct(dto).getCode()).isEqualTo("E0008");
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void setRejectsUpdateThatStealsAnotherProductsName() {
+        Product other = new Product();
+        other.setId(2L);
+        other.setProductName("Coffee");
+        when(productRepository.findByProductName("Coffee")).thenReturn(Optional.of(other));
+
+        ProductDto dto = new ProductDto();
+        dto.setId(1L);                 // a different product
+        dto.setProductName("Coffee");  // trying to take id=2's name
+
+        assertThat(service.setProduct(dto).getCode()).isEqualTo("E0008");
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void setAllowsAProductToKeepItsOwnNameOnUpdate() {
+        Product self = new Product();
+        self.setId(1L);
+        self.setProductName("Coffee");
+        when(productRepository.findByProductName("Coffee")).thenReturn(Optional.of(self));
+        when(productRepository.findById(1L)).thenReturn(Optional.of(self));
+        when(productRepository.save(any(Product.class))).thenAnswer(i -> i.getArgument(0));
+
+        ProductDto dto = new ProductDto();
+        dto.setId(1L);
+        dto.setProductName("Coffee");   // unchanged — must not clash with itself
+        dto.setProductPrice(new BigDecimal("99.00"));
+
+        assertThat(service.setProduct(dto).isSuccess()).isTrue();
+        verify(productRepository).save(any(Product.class));
+    }
+
+    @Test
+    void setTranslatesAConstraintViolationIntoTheDuplicateCode() {
+        // Simulates losing the race: the pre-check sees nothing, the database
+        // then rejects the insert on uq_product_name.
+        when(productRepository.findByProductName("Coffee")).thenReturn(Optional.empty());
+        when(productRepository.save(any(Product.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate entry"));
+
+        ProductDto dto = new ProductDto();
+        dto.setProductName("Coffee");
+
+        ResponseDto res = service.setProduct(dto);
+        assertThat(res.getCode()).isEqualTo("E0008");
+        assertThat(res.isFail()).isTrue();
     }
 
     // --- setProduct: create vs update -------------------------------------
@@ -243,3 +309,4 @@ class ProductServiceImplTest {
         verify(productRepository).deleteById(3L);
     }
 }
+

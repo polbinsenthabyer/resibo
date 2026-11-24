@@ -25,10 +25,13 @@ CREATE TABLE IF NOT EXISTS product (
     updated_at               DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
                                                     ON UPDATE CURRENT_TIMESTAMP(3),
     PRIMARY KEY (id),
-    -- Not in the original specification. Added because the list endpoint
-    -- filters and sorts on product_name, and without it every page scans the
-    -- whole table. Drop it if you would rather keep the schema minimal.
-    KEY idx_product_name (product_name)
+    -- Product names are unique. Note this is a CASE-INSENSITIVE constraint:
+    -- the column collates as utf8mb4_general_ci, so 'Coffee' and 'COFFEE'
+    -- collide. That is intended -- two catalogue entries differing only in
+    -- capitalisation are a data-entry mistake, not two products.
+    -- The index also serves the list endpoint, which filters and sorts on
+    -- product_name; without it every page would scan the whole table.
+    CONSTRAINT uq_product_name UNIQUE (product_name)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_general_ci;

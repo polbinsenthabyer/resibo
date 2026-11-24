@@ -8,9 +8,24 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.util.Optional;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
+
+    /**
+     * Looks up a product by name for the uniqueness check.
+     *
+     * <p>Deliberately a plain equality match rather than {@code IgnoreCase}:
+     * the column collates as {@code utf8mb4_general_ci}, so this is already
+     * case-insensitive <em>and</em> can still use the unique index. An
+     * {@code IgnoreCase} derivation would wrap the column in a function and
+     * lose the index for no behavioural gain.
+     *
+     * <p>If the collation is ever changed to a case-sensitive one, this
+     * method quietly becomes case-sensitive too — see sql/tables/product.sql.
+     */
+    Optional<Product> findByProductName(String productName);
 
     /**
      * Filtered, paginated search.

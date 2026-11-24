@@ -10,6 +10,7 @@ import com.api.resibo.utilities.MessageType;
 import com.api.resibo.utilities.ResponseUtility;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -72,6 +73,18 @@ public class ProductServiceImpl implements ProductService {
             return ResponseUtility.getErrorResponse("E0006", MessageType.ERROR_PRODUCT_STOCKS_NEGATIVE);
         }
 
+        // Product names are unique. Checked here so the caller gets a usable
+        // message; the database enforces it too (uq_product_name), which is
+        // what actually makes it true — see the catch below.
+        //
+        // Case-insensitive, because the column collates as general_ci: renaming
+        // "coffee" to "COFFEE" is not a clash with itself, but creating
+        // "COFFEE" alongside an existing "coffee" is.
+        Product clash = productRepository.findByProductName(name).orElse(null);
+        if (clash != null && (dto.getId() == null || !clash.getId().equals(dto.getId()))) {
+            return ResponseUtility.getErrorResponse("E0008", MessageType.ERROR_PRODUCT_NAME_ALREADY_EXISTS);
+        }
+
         try {
             Product product;
             Date now = new Date();
@@ -100,6 +113,13 @@ public class ProductServiceImpl implements ProductService {
 
             return ResponseUtility.getSuccessResponse(
                     MessageType.SUCCESSFULLY_SET_PRODUCT, productRepository.save(product));
+        } catch (DataIntegrityViolationException e) {
+            // The check above can lose a race: two concurrent creates both see
+            // no clash, then one hits the unique index. The database is the
+            // real arbiter, so translate its rejection into the same code
+            // rather than reporting a generic failure.
+            log.warn("setProduct hit a constraint violation for name={}", name);
+            return ResponseUtility.getErrorResponse("E0008", MessageType.ERROR_PRODUCT_NAME_ALREADY_EXISTS);
         } catch (Exception e) {
             // Logged, not returned: the caller gets a stable code, the detail
             // stays in the server log rather than going out over the wire.
