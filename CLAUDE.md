@@ -55,9 +55,9 @@ Two of them govern the whole design:
 | Branch | Contents |
 |---|---|
 | `main` | `README.md` only. Never application code. |
-| `dev/resibo` | Everything else. **All work commits directly here.** |
+| `dev/api/resibo` | Everything else. **All work commits directly here.** |
 
-Commit straight to `dev/resibo` — no feature branches, no pull requests — and
+Commit straight to `dev/api/resibo` — no feature branches, no pull requests — and
 push every commit. Touch `main` only to update the README. Keep commit messages
 brief and precise; Conventional Commits, imperative mood.
 

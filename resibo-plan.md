@@ -52,14 +52,14 @@
 
 | Field | Value |
 |---|---|
-| Document version | 0.3 — template, not yet filled in |
+| Document version | 0.4 — template, not yet filled in |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-24 |
 | Last updated by | Claude (initial template) |
 | Plan status | **AWAITING OWNER INPUT** |
 | Working copy | `C:\Users\okarun\sprintify_solutions\personal\resibo` |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
-| This document lives on | branch `dev/resibo` — see §7.1 |
+| This document lives on | branch `dev/api/resibo` — see §7.1 |
 | Vault notes | `Obsidian Vault/Projects/personal/resibo/` |
 
 ---
@@ -414,18 +414,86 @@ backend/src/main/java/.../resibo/
     └── reporting/           read-side queries across modules
 ```
 
-Each module internally:
+### 6.1.1 `[BLOCKER]` Reference project: gainsoclock — and a conflict to resolve
+
+The owner named `C:\Users\okarun\sprintify_solutions\personal\gainsoclock` as the
+reference for clean structure (2026-11-24). Its backend is Spring Boot 4.1.2 on
+Java 17, Maven, MariaDB — the same shape as Resibo.
+
+**gainsoclock is organised layer-first, not by feature:**
 
 ```
-modules/sales/
-├── api/                     what other modules may call: interfaces + DTOs
-├── web/                     REST controllers, request/response models
-├── domain/                  entities and business rules (package-private)
-├── persistence/             repositories (package-private)
-└── internal/                everything else nobody outside should see
+com/gainsoclock/backend/
+├── configs/        SecurityConfig + jwt/ (filter, util, entry point, denied handler)
+├── controllers/    + admin/ client/ employee/ sub-packages
+├── dtos/           flat: XxxDto, XxxListDto, ResponseDto, LoginDto...
+├── entities/       JPA entities, flat
+├── repositories/   Spring Data interfaces, flat
+├── services/       + admin/ client/ employee/ — interface + XxxServiceImpl pairs
+├── types/          enums, all suffixed *Type
+└── utilities/      ResponseUtility, SecurityUtil, QRCodeUtil, UserUtility...
 ```
 
-**Open questions on this:**
+**This directly contradicts §6.1.** A modular monolith is packaged *by feature*
+with module-private internals; gainsoclock is packaged *by layer* with
+role sub-packages. Both are defensible; they are not combinable as written, and
+the choice sets every file path in the backend. So it needs an explicit answer
+rather than a quiet compromise:
+
+- [ ] **A — Follow gainsoclock exactly.** Layer-first, as above. Familiar,
+      consistent with the sibling project, fastest to start. Abandons the
+      modular-monolith decision; module boundaries cannot be enforced, because
+      there are no modules.
+- [ ] **B — Modular monolith, with gainsoclock's conventions inside each module.**
+      Keep feature modules and their boundaries; inside each one, use
+      gainsoclock's familiar layer packages. Reads like gainsoclock locally while
+      keeping the `sales` module from reaching into `inventory`'s tables.
+
+      ```
+      modules/sales/
+      ├── api/            the only package other modules may import
+      ├── controllers/
+      ├── services/       interface + XxxServiceImpl
+      ├── dtos/
+      ├── entities/       package-private
+      ├── repositories/   package-private
+      └── types/
+      ```
+
+- [ ] **C — Layer-first for v1, restructure later.** Honest about speed, but
+      "later" rarely arrives, and the restructure is the expensive kind.
+
+**My recommendation: B.** It is the only option that honours both instructions —
+the modular monolith you chose and the gainsoclock conventions you want the code
+to read like. A costs you the boundaries; C defers the cost at interest.
+
+**Answer:**
+
+### 6.1.2 Conventions adopted from gainsoclock
+
+Independent of the layout question above, these carry over. They are what makes
+the reference project read consistently, and none of them conflict with §6.1.
+
+| Convention | Detail |
+|---|---|
+| Service shape | Interface + `XxxServiceImpl` pair, never a bare class |
+| Uniform response | Every service method returns `ResponseDto` |
+| `ResponseDto` fields | `responseType`, `code`, `data`, `message`, `className`, `methodName`, `responseTime`, plus `isSuccess()` / `isFail()` |
+| Response construction | Static factories — `ResponseUtility.getSuccessResponse(message[, data])`, `getErrorResponse(code, message)` |
+| Result codes | Short coded strings (`S0001`, error codes per case) alongside the message |
+| DTO pairing | `XxxDto` for a single item or write, `XxxListDto` for a query or list |
+| Enums | In `types/`, suffixed `*Type` |
+| Boilerplate | Lombok `@Data` / `@NoArgsConstructor` / `@AllArgsConstructor` on DTOs |
+| Shared helpers | `utilities/` for stateless static helpers |
+| Config | `application.yaml`; `.env` and `.env.*` git-ignored |
+| Deployment | `scripts/deploy.sh`, `scripts/deploy-prelive.sh`; GitHub Actions at `.github/workflows/maven.yml` |
+
+| Question | My recommendation | Your decision |
+|---|---|---|
+| Keep the `ResponseDto` envelope, including `className`/`methodName`? | Keep it for consistency with gainsoclock. Note that `className`/`methodName` leak internals to the client — I'd keep them out of error responses in production. | |
+| Match gainsoclock's Spring Boot 4.1.2 / Java 17 exactly? | Match Spring Boot 4.1.x. For Java, prefer 21 (LTS, and Boot 4 supports it) unless the server's JDK is 17 — §7 will decide that. | |
+
+**Open questions on the module structure:**
 
 | Question | My recommendation | Your decision |
 |---|---|---|
@@ -479,13 +547,47 @@ MariaDB   ──►  nightly backup, off-machine   [see §10]
 
 | Question | Answer |
 |---|---|
-| Server: provider, OS, specs | |
+| Server | Self-hosted on the owner's LAN, Ubuntu. Address, user, and password are in the handover file (§8) — **deliberately not written here, because this repository is public.** |
+| Server OS / specs | Ubuntu (version TBC — needs a shell session to confirm) |
 | How we deploy (git pull + restart / Docker / CI pipeline) | |
 | Domain name | |
 | Cloudflare role: DNS only / proxied / Tunnel / Access in front of admin | |
 | TLS: Cloudflare origin cert / Let's Encrypt | |
 | Who else needs server access | |
-| GitHub repository visibility: public or private? | |
+
+### 7.2 Verified infrastructure (checked 2026-11-24)
+
+What was actually tested, not assumed:
+
+| Item | Result |
+|---|---|
+| Server reachable | Yes — ICMP and TCP/22 both open |
+| SSH host key | ED25519, `SHA256:9b3TMT0pLsHF7uuhLHcHvuPilT3l8xDTHlIiKcfZRPc`, recorded in `known_hosts` |
+| SSH auth methods offered | `publickey, password` |
+| SSH login by assistant | **Not yet working.** Password auth needs an interactive terminal, which an agent session does not have. Pending public-key install — see §8. |
+| Database reachable | Yes — TCP/3306 open |
+| Database connection | **Working**, verified with a real query |
+| MariaDB version | 11.8.6-MariaDB-5ubuntu0.1 (Ubuntu) |
+| Server charset / collation | `utf8mb4` / `utf8mb4_uca1400_ai_ci` |
+| `resibo` schema | Exists, and is **empty** — no tables |
+| Shared host | ⚠️ The same MariaDB instance also hosts unrelated databases for other projects |
+| GitHub repository visibility | ⚠️ **Public** — confirmed via the GitHub API |
+
+**Three consequences worth acting on:**
+
+1. **The repository is public.** Everything committed is world-readable, now and
+   in history. No infrastructure addresses, usernames, or internal hostnames go
+   into it — hence the redaction in the table above. Verified 2026-11-24 that no
+   credential value appears in any commit on any branch.
+2. **The database is shared with other projects.** Connecting as `root` means a
+   bug in Resibo can read or destroy unrelated project data. This turns §8's
+   "use a least-privilege app user" from good practice into the actual fix.
+3. **The `resibo` schema is empty**, so there is no legacy structure to work
+   around — the schema in §4 can be designed freely once the blockers are
+   answered.
+
+**Open:** Ubuntu version, JDK available on the server, and whether MariaDB should
+stay shared or get a dedicated instance for Resibo.
 
 ### 7.1 Branches (decided)
 
@@ -494,29 +596,35 @@ MariaDB   ──►  nightly backup, off-machine   [see §10]
 | Branch | Holds |
 |---|---|
 | `main` | `README.md` only — the public face of the repository |
-| `dev/resibo` | development branch; carries `README.md` **and** this plan |
+| `dev/api/resibo` | backend development branch; carries `README.md`, `CLAUDE.md` **and** this plan |
 
-Remote: `https://github.com/polbinsenthabyer/resibo.git`
+Remote: `https://github.com/polbinsenthabyer/resibo.git` — **public** (see §7.2).
+
+**Naming (decided by owner, 2026-11-24):** the `api` segment distinguishes
+backend work from frontend work, matching the sibling project [gainsoclock],
+which uses `live/api/...` and `live/app/...`. A frontend branch would therefore
+be `dev/app/resibo`. The original `dev/api/resibo` was renamed to `dev/api/resibo`
+and deleted locally and on the remote; the commits are unchanged.
 
 Consequences, so no session is surprised by them:
 
 - **This plan is not on `main`.** A session that clones the default branch sees
   only the README. The README points at the plan and names the branch; follow it.
-- `dev/resibo` is where work happens. `main` receives only what should be public
+- `dev/api/resibo` is where work happens. `main` receives only what should be public
   and stable.
-- Keeping the plan off `main` means it must be updated on `dev/resibo`, and any
+- Keeping the plan off `main` means it must be updated on `dev/api/resibo`, and any
   README change the plan triggers has to reach `main` separately.
 
 **Also decided by owner, 2026-11-24:**
 
-- **All work commits directly to `dev/resibo`.** No feature branches for now, no
+- **All work commits directly to `dev/api/resibo`.** No feature branches for now, no
   pull requests. Application code, documentation, migrations — all of it goes to
-  `dev/resibo`.
+  `dev/api/resibo`.
 - **`main` holds `README.md` and nothing else.** It is not a release branch and
   does not receive application code. The only commits `main` ever gets are README
   updates.
 
-So the standing instruction for every session is: **work on `dev/resibo`.** Touch
+So the standing instruction for every session is: **work on `dev/api/resibo`.** Touch
 `main` only to update the README, and then only the README.
 
 **Push policy (decided by owner, 2026-11-24):** push to the remote. Sessions do
@@ -576,23 +684,66 @@ My proposal, to be confirmed:
 
 Fill in the last three columns. **Leave the value out.**
 
-| Credential | Purpose | Where the value lives | Owner | Status |
-|---|---|---|---|---|
-| GitHub repository access | push, clone, CI | | | not yet provided |
-| Server SSH key | deploy, administer | | | not yet provided |
-| Database app user | application connection | | | not yet provided |
-| Database admin user | migrations, backup | | | not yet provided |
-| Cloudflare API token | DNS, tunnel | | | not yet provided |
-| Domain registrar login | domain ownership | | | not yet provided |
-| JWT signing key | session tokens | generated per environment | | not created |
-| SMTP / email provider | receipts, password reset | | | not decided |
-| Payment provider keys | card / e-wallet | | | depends on §2.6 |
+All values supplied so far live in one git-ignored file outside every repository:
+
+```
+C:\Users\okarun\.secrets\resibo.env     (ACL-restricted to the owner's account)
+```
+
+| Credential | Purpose | Where the value lives | Status |
+|---|---|---|---|
+| GitHub repository access | push, clone, CI | Git Credential Manager (already working) | ✅ working |
+| Server SSH account | deploy, administer | `resibo.env` → `RESIBO_SERVER_*` | ⚠️ supplied, **login not yet working** (see below) |
+| Database admin user (`root`) | currently the only DB access | `resibo.env` → `RESIBO_DB_*` | ✅ **connection verified** 2026-11-24 |
+| Database app user | application connection, least privilege | not created | ❌ **to create — see risk 2 below** |
+| Cloudflare account | DNS, tunnel | OAuth, pending browser authorisation | ⚠️ in progress |
+| Cloudflare API token | unattended/CI use | not created | ❌ not yet needed |
+| Domain registrar login | domain ownership | | not yet provided |
+| JWT signing key | session tokens | generate per environment | not created |
+| SMTP / email provider | receipts, password reset | | not decided |
+| Payment provider keys | card / e-wallet | | depends on §2.6 |
 
 | Question | Answer |
 |---|---|
 | Who holds the master copy of all credentials? | |
 | Password manager in use? | |
 | Rotation expectation (e.g. every 90 days)? | |
+
+### 8.1 Outstanding security risks
+
+Recorded here because they are real, cheap to fix now, and expensive to fix after
+the app is live. Each needs an owner decision.
+
+**1. The supplied credentials were pasted into a chat session, so they are
+exposed.** Storing them properly afterwards does not undo that. Both the SSH
+account and the database `root` account should be rotated once key-based access
+works. Verified 2026-11-24: no credential value appears in any commit on any
+branch, so the exposure is to the session transcript only, not to the public
+repository.
+
+**2. The application must not connect to MariaDB as `root`.** Three reasons
+compound here: `root` is authenticated as `root@%` (connectable from any host),
+the same instance hosts unrelated project databases, and the password is reused
+with the SSH account. Any one of those is tolerable; together, a single SQL
+injection in Resibo reaches every other project on that server.
+
+> **Proposed fix:** create a dedicated user granted only what it needs on
+> `resibo.*` — no `GRANT OPTION`, no access to other schemas, and not
+> connectable from `%`. Keep `root` for migrations and backups only, run by a
+> person. I have **not** done this; creating a database user on a shared server
+> affects other projects, so it is your call.
+>
+> **Decision needed:**
+
+**3. The password is reused between the SSH account and the database.** One
+compromise becomes two. Recommend different values at rotation time.
+
+**4. The repository is public.** Infrastructure addresses and usernames stay out
+of it, including out of this file. If the project would rather keep its planning
+private, making the repository private is the simpler fix than redacting
+documentation forever.
+
+> **Decision needed:** keep the repository public, or make it private?
 
 ---
 
@@ -680,8 +831,12 @@ trivia the next session cannot reuse.
 | 2026-11-24 | No code, scaffolding, or project generation until this plan's blockers are answered | Owner's instruction. The offline and tax-receipt answers change the schema and the architecture; generating a project first would mean discarding it. | Owner |
 | 2026-11-24 | Credentials are referenced by name in the plan; values live outside the repo and outside the vault | Secrets in documentation leak through git history, backups, and notes. Names are enough to describe the system. | Claude, per standing rule |
 | 2026-11-24 | Remote is `github.com/polbinsenthabyer/resibo` | Owner-supplied | Owner |
-| 2026-11-24 | `main` holds `README.md` only; everything else lives on `dev/resibo`, committed to directly | Owner's choice. Keeps the public face of the repository to a single curated document while development history stays on one working branch. | Owner |
+| 2026-11-24 | `main` holds `README.md` only; everything else lives on `dev/api/resibo`, committed to directly | Owner's choice. Keeps the public face of the repository to a single curated document while development history stays on one working branch. | Owner |
 | 2026-11-24 | Push every commit to the remote; commit messages brief and precise | Owner's instruction. The remote is the project's only off-machine backup, which matters most while the plan is the most valuable thing in the repository. | Owner |
+| 2026-11-24 | The working branch is `dev/api/resibo`, not `dev/resibo` | Owner's choice. The `api` segment separates backend from frontend work, matching gainsoclock's `live/api/...` and `live/app/...` convention; a frontend branch becomes `dev/app/resibo`. | Owner |
+| 2026-11-24 | `gainsoclock` is the reference for code structure and conventions | Owner's instruction. Consistency across the two personal Spring Boot projects lowers the cost of moving between them. The conventions are adopted in §6.1.2; the **layout** conflicts with the modular-monolith decision and is raised as a blocker in §6.1.1 rather than silently resolved. | Owner, conflict flagged by Claude |
+| 2026-11-24 | Infrastructure addresses and usernames are kept out of the repository, not just passwords | The repository was confirmed public. A private LAN address plus an account name is reconnaissance material, and git history is permanent. The handover file holds them instead. | Claude |
+| 2026-11-24 | The database connection is verified working; SSH is not | Recorded so no later session assumes server access exists. Password-only SSH cannot be used by an agent session, which has no interactive terminal. | Claude |
 
 ---
 
@@ -690,5 +845,6 @@ trivia the next session cannot reuse.
 | Date | Version | Change | By |
 |---|---|---|---|
 | 2026-11-24 | 0.1 | Initial template. Stack and modular-monolith structure recorded as decided; all scope, architecture, and deployment questions open. | Claude |
-| 2026-11-24 | 0.2 | Added §7.1 branches: remote URL, `main` is README-only, all work commits directly to `dev/resibo`. Push policy still open. | Claude |
+| 2026-11-24 | 0.2 | Added §7.1 branches: remote URL, `main` is README-only, all work commits directly to `dev/api/resibo`. Push policy still open. | Claude |
 | 2026-11-24 | 0.3 | Push policy decided (push every commit) and commit-message convention recorded in §7.1. `CLAUDE.md` added to the repository pointing future sessions here. Vault notes created. | Claude |
+| 2026-11-24 | 0.4 | Branch renamed to `dev/api/resibo`. Added §6.1.1 (gainsoclock reference and the layout conflict, as a blocker) and §6.1.2 (adopted conventions). Added §7.2 verified infrastructure: DB connection working, SSH not, repository confirmed public. Rewrote §8 with the handover file location and added §8.1 outstanding security risks. Added `.gitignore`. | Claude |
