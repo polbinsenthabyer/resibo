@@ -94,7 +94,7 @@ from:
 ```
 server/src/main/java/com/api/resibo/
 ├── ResiboApplication.java
-├── configs/         SecurityConfig, and jwt/ for the filter, util and handlers
+├── configs/         SecurityConfig and CorsConfig, and jwt/ for the filter and handlers
 ├── controllers/     AuthController, HealthController, and admin/ for admin-only
 ├── dtos/            ResponseDto — the single response envelope — and the rest
 ├── entities/        Product, User, UserRole

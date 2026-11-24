@@ -127,7 +127,8 @@ the repository root (it moved there on 2026-11-24, plan §7.1) and not under
 `com.api.resibo`, mirroring the sibling project gainsoclock:
 
 ```
-configs/        SecurityConfig, and jwt/ for the filter, util and two handlers
+configs/        SecurityConfig (who may call what), CorsConfig (which browser
+                origins may), and jwt/ for the filter, util and two handlers
 controllers/    AuthController, HealthController, and admin/ for admin-only ones
 dtos/           flat: ResponseDto, PageDto, LoginDto, SignupDto, ProductDto...
 entities/       Product, User, UserRole

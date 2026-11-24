@@ -857,7 +857,13 @@ two projects.
 
 #### Who can reach what
 
-All of it in `configs/SecurityConfig.java`, in one place on purpose.
+Authentication and authorisation are all in `configs/SecurityConfig.java`, in
+one place on purpose. **CORS is deliberately not there** — it moved to
+`configs/CorsConfig.java` on 2026-11-24, because "which origins may read a
+response" is a different question from "who may call this", it changes for
+different reasons, and separating them means editing the allow-list cannot
+disturb the filter chain. `SecurityConfig` keeps the `.cors(...)` opt-in;
+without that line the bean is ignored and no CORS headers are written at all.
 
 | Path | Who |
 |---|---|
@@ -1291,7 +1297,7 @@ Java 17, Maven, MariaDB — the same shape as Resibo.
 
 ```
 com/gainsoclock/backend/
-├── configs/        SecurityConfig + jwt/ (filter, util, entry point, denied handler)
+├── configs/        SecurityConfig, CorsConfig + jwt/ (filter, util, entry point, denied handler)
 ├── controllers/    + admin/ client/ employee/ sub-packages
 ├── dtos/           flat: XxxDto, XxxListDto, ResponseDto, LoginDto...
 ├── entities/       JPA entities, flat
