@@ -2,14 +2,17 @@
 
 A point-of-sale application — Spring Boot, React, and MariaDB.
 
-> **Status: planning, with a deployed skeleton.** The backend builds, runs, and
-> answers a health check — and that is all it does. It is deployed and publicly
-> reachable at **<https://resibo-api.polbinsenthabyer.uk>**, which proves the
-> road to production works and nothing about the product: there is **no database
-> connection**, no schema, no authentication, and no frontend. Scope, the data
-> model, and the architecture are still being settled in
-> [`resibo-plan.md`](resibo-plan.md) before the rest is built. That document is
-> the project's source of truth; this README is the summary of it.
+> **Status: planning, with a deployed skeleton.** The backend builds, runs,
+> answers a health check, and connects to MariaDB — and that is all it does. It
+> is deployed and publicly reachable at
+> **<https://resibo-api.polbinsenthabyer.uk>**, which proves the road to
+> production works and nothing about the product. The database connection is
+> likewise plumbing, not persistence: there are **no entities, no repositories,
+> no schema and no migrations**, so the application connects to an empty
+> database and reads and writes nothing. There is no authentication and no
+> frontend. Scope, the data model, and the architecture are still being settled
+> in [`resibo-plan.md`](resibo-plan.md) before the rest is built. That document
+> is the project's source of truth; this README is the summary of it.
 
 ---
 
@@ -30,17 +33,43 @@ checkout screen and little else.
 |---|---|
 | Backend | Spring Boot 4.2.0 on Java 17, built with Maven, packaged as a `jar` |
 | Frontend | React — not started |
-| Database | MariaDB — chosen, not yet connected to |
+| Database | MariaDB — connected via Spring Data JPA, with **no schema and no entities yet** |
 | Hosting | Docker on a self-hosted Ubuntu server, reverse-proxied by nginx, fronted by a Cloudflare tunnel |
 
 The backend's dependencies today are deliberately few: `webmvc`, Actuator,
-Lombok, DevTools, and the matching test starters. No persistence layer, no
-migrations tool, and no security starter are in the build yet, because the
+Lombok, DevTools, the matching test starters, and — since the database
+integration — Spring Data JPA with the MariaDB driver at `runtime` scope. No
+migrations tool and no security starter are in the build yet, because the
 decisions they would encode are still open.
 
 The remaining choices — migrations, auth, frontend tooling, test frameworks —
 are proposed with recommendations in
 [§5 of the plan](resibo-plan.md#5-tech-stack) and await sign-off.
+
+## The database connection
+
+The application opens a HikariCP pool (`resibo-pool`) to the `resibo` schema as
+a **dedicated least-privilege account** — not the instance superuser, which that
+shared server reserves for migrations and backups run by a person. The account
+can do anything inside its own schema and nothing outside it.
+
+Three things about it are deliberate, and two of them are rules:
+
+- **`spring.jpa.hibernate.ddl-auto` is `none`, and must stay `none`.** Hibernate
+  never creates, alters, or drops anything; the schema is owned outside the
+  application. This is not a preference: if Resibo ends up issuing
+  BIR-registered receipts, an ORM silently altering a sales table is exactly the
+  class of change that destroys an audit trail.
+- **The datasource URL, username, and password have no defaults.** A missing
+  configuration fails startup loudly rather than connecting somewhere
+  unintended — which matters, because that MariaDB instance also hosts unrelated
+  projects.
+- `spring.jpa.open-in-view` is `false`, keeping the persistence context out of
+  the view layer.
+
+**None of this is persistence.** The schema holds zero tables, nothing maps to
+it, and no request touches it. See
+[§5.3 of the plan](resibo-plan.md#53-the-database-connection-2026-11-24).
 
 ## Backend architecture
 
@@ -99,8 +128,9 @@ answered.
 
 ## Getting started
 
-You need a **JDK 17**. You do not need Maven — the `mvnw` wrapper is committed
-and will fetch it.
+You need a **JDK 17** and a **MariaDB you are willing to point at** — see the
+database note below, because the build's tests need one too. You do not need
+Maven: the `mvnw` wrapper is committed and will fetch it.
 
 `JAVA_HOME` must point at that JDK, and it must be set in **every** shell you
 build from — it is the one real piece of friction here. Without it the wrapper
@@ -129,12 +159,13 @@ Then run it:
 java -jar target/resibo-0.0.1-SNAPSHOT.jar    # or the built jar, either shell
 ```
 
-It listens on port 8080 unless `SERVER_PORT` says otherwise. Two endpoints
-answer:
+It listens on port 8080 unless `SERVER_PORT` says otherwise; the project's own
+`.env.dev` sets **8083**, matching the host port the deployed container uses, so
+a local URL and a deployed one mean the same thing. Two endpoints answer:
 
 ```sh
-curl http://localhost:8080/api/health/check
-curl http://localhost:8080/actuator/health
+curl http://localhost:8083/api/health/check     # 8080 if SERVER_PORT is unset
+curl http://localhost:8083/actuator/health
 ```
 
 If you have Docker and would rather not deal with `JAVA_HOME` at all, the same
@@ -148,9 +179,24 @@ Configuration comes from a per-environment env file chosen by `APP_ENV` —
 `.env.dev` by default, loaded if it is there and ignored if it is not. Copy the
 committed `.env.example`, which carries variable names and no values.
 
-No database is needed to build or run any of this — the application does not
-connect to one yet. Instructions for MariaDB, migrations, and the frontend
-follow the decisions that produce them.
+**You do need a MariaDB now.** The datasource properties have no defaults, so
+`DATASOURCE_URL`, `DATABASE_USERNAME` and `DATABASE_PASSWORD` must be set — in
+`.env.dev` or in the environment — or the application fails to start, on
+purpose. That applies to `./mvnw verify` as well as to running it: one of the
+two tests starts the Spring context, so **the test suite needs a reachable
+database too**.
+
+A caution that belongs here rather than in the plan's small print: the
+`.env.dev` used while this was built points at the **shared server instance**,
+which is the same database the deployed application uses. CI runs against a
+throwaway MariaDB service container instead. Pointing local work at a local
+MariaDB — or at Testcontainers — is the open item in
+[§12 of the plan](resibo-plan.md#12-open-questions); until it is closed, know
+what your `DATASOURCE_URL` is aimed at before you run a test that writes.
+
+Nothing creates tables: `ddl-auto` is `none` and there are no migrations yet.
+Instructions for the schema, migrations, and the frontend follow the decisions
+that produce them.
 
 ## Deployment
 
@@ -169,9 +215,9 @@ curl https://resibo-api.polbinsenthabyer.uk/api/health/check
 ```
 
 > **"Deployed" does not mean "working POS".** The live application connects to
-> no database — no JPA dependency, no JDBC driver, no schema in use. It answers
-> health checks, and every question about what Resibo actually does is still
-> open in the plan.
+> its database and holds an idle connection pool against an **empty schema** —
+> no tables, no entities, no migrations. It answers health checks, and every
+> question about what Resibo actually does is still open in the plan.
 
 Deploying is manual, from a git checkout on the server:
 
@@ -180,6 +226,11 @@ cd /opt/resibo/app
 git pull
 sudo -E bash scripts/deploy.sh
 ```
+
+A GitHub Actions workflow, `.github/workflows/ci.yml`, builds and tests every
+push to the working branch against a throwaway MariaDB service container — the
+real database sits on a private network a hosted runner cannot reach. It is the
+gate, not the artifact producer: the server still builds its own image.
 
 `scripts/deploy.sh` builds the image on the server using the committed `mvnw`,
 so the server needs only Docker — no JDK, no Maven. It then tags the running
@@ -204,6 +255,16 @@ and the committed `.env.example` lists the variable **names** with empty values.
 Every other `.env.*` file is git-ignored, and `.dockerignore` keeps all of them
 out of the container image under any name. Real values live outside the
 repository — on the server, in a `0600` env file outside the checkout.
+
+The database credential that file holds belongs to a **least-privilege account
+scoped to the `resibo` schema**, not to the instance superuser, so a compromise
+of the application cannot reach the unrelated projects that share the server.
+
+One apparent exception, which is not one: the MariaDB credentials in the CI
+workflow are in plain sight deliberately. They belong to a container created for
+a single job and destroyed with it, so there is nothing there to protect — and
+a list of "secrets" containing things that are not secret is a list nobody
+reads carefully.
 
 See [§8 of the plan](resibo-plan.md#8-credentials-and-secrets) for the full
 handling rules and the inventory of credentials the project needs.

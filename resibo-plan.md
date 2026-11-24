@@ -5,18 +5,24 @@
 > disagree, one of them is a bug: either the code drifted, or this file went
 > stale and must be corrected in the same change that revealed it.
 
-**Status: planning, with a deployed skeleton.** A buildable Spring Boot
-application now exists — scaffold, response envelope, health endpoint, green
-tests (§5.1) — and it is deployed: it runs on the server in Docker behind the
-host's nginx, fronted by the Cloudflare tunnel that already serves the sibling
-projects, and answers on `https://resibo-api.polbinsenthabyer.uk` (§7.3).
+**Status: planning, with a deployed skeleton that now reaches its database.** A
+buildable Spring Boot application exists — scaffold, response envelope, health
+endpoint, green tests (§5.1) — it is deployed, running on the server in Docker
+behind the host's nginx, fronted by the Cloudflare tunnel that already serves
+the sibling projects, answering on `https://resibo-api.polbinsenthabyer.uk`
+(§7.3), and as of 2026-11-24 it **connects to MariaDB** as a dedicated
+least-privilege account, with Hibernate forbidden from touching the schema
+(§5.3).
 
-**Read "deployed" narrowly.** What is live serves the two health endpoints and
-nothing else. There is no domain code, no schema, and **no database connection
-at all** — no JPA, no JDBC driver, no migrations. **Every `[BLOCKER]` item below
-is still unanswered, and nothing that depends on one should be written until it
-is.** A deployed skeleton unblocks none of them; it only means that when there
-is something to ship, the road to the public internet is already built and
+**Read both "deployed" and "connected" narrowly.** What is live serves the two
+health endpoints and nothing else. The schema it connects to is **empty**:
+there are **no entities, no repositories, no tables and no migrations**, so
+nothing is read and nothing is written. "Connected to the database" is a
+plumbing milestone, not persistence, and must never be reported as the latter.
+**Every `[BLOCKER]` item below is still unanswered, and nothing that depends on
+one should be written until it is.** A deployed skeleton with a live connection
+pool unblocks none of them; it only means that when there is something to ship,
+the road to the public internet and the road to the data are both built and
 tested.
 
 ---
@@ -63,11 +69,11 @@ tested.
 
 | Field | Value |
 |---|---|
-| Document version | 0.6 — deployment recorded; scope still unfilled |
+| Document version | 0.7 — database connection recorded; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-24 |
-| Last updated by | Claude (recorded the Docker deployment and the Cloudflare tunnel) |
-| Plan status | **AWAITING OWNER INPUT** — the skeleton is deployed and publicly reachable (§7.3), but it serves health endpoints only, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
+| Last updated by | Claude (recorded the JPA datasource, the least-privilege database account, and the CI service container) |
+| Plan status | **AWAITING OWNER INPUT** — the skeleton is deployed, publicly reachable (§7.3) and now connected to MariaDB (§5.3), but it serves health endpoints only against an empty schema, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
 | Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
 | Production URL | `https://resibo-api.polbinsenthabyer.uk` — health endpoints only; see §7.3 |
@@ -369,17 +375,17 @@ a choice has been made in code, and says **open** where nothing has been chosen.
 | Local restart | Spring Boot DevTools | **DevTools — in use**, `runtime` and `optional`. |
 | API style | REST + JSON | REST + JSON **as built** — though only one endpoint exists, so this is cheap to revisit. |
 | API docs | OpenAPI generated from the controllers | **Open** — no OpenAPI dependency in the pom. |
-| DB migrations | Flyway, versioned SQL committed to the repo | **Open** — no Flyway in the pom, no migrations, nothing to migrate. |
-| Persistence | Spring Data JPA, with plain SQL where reporting needs it | **Open** — no JPA starter and no JDBC driver in the pom. **The application connects to no database at all.** |
+| DB migrations | Flyway, versioned SQL committed to the repo | **Open, and now the gap that matters** — no Flyway in the pom and no migrations, while `ddl-auto: none` means Hibernate will not create a table either. The schema has no owner yet; §12 #15. |
+| Persistence | Spring Data JPA, with plain SQL where reporting needs it | **Spring Data JPA — in use** (§5.3), with the MariaDB driver at `runtime` scope. The application connects to the `resibo` schema as a dedicated least-privilege account. **There are still no entities and no repositories**, so JPA manages nothing yet; the connection pool is real, the persistence is not. |
 | Auth | Short-lived JWT access token + refresh; roles from §1.3 | **Open** — no Spring Security; the health endpoint is unauthenticated. Blocked on §1.3. |
 | Frontend build | Vite | **Open** — no frontend code exists. |
 | Frontend language | TypeScript | **Open** |
 | Server state | TanStack Query | **Open** |
 | UI components | shadcn/ui on Tailwind | **Open** |
 | Routing | React Router | **Open** |
-| Backend tests | JUnit 5 + Testcontainers against real MariaDB | **JUnit 5 in use** (`spring-boot-starter-webmvc-test`, `spring-boot-starter-actuator-test`). **Testcontainers open** — nothing to containerise until persistence is decided. |
+| Backend tests | JUnit 5 + Testcontainers against real MariaDB | **JUnit 5 in use** (`spring-boot-starter-webmvc-test`, `spring-boot-starter-actuator-test`, `spring-boot-starter-data-jpa-test`). **Testcontainers still open — and it stopped being academic**: the context test now needs a datasource, CI supplies a throwaway one (§5.3), but a local `mvnw verify` loads `.env.dev` and therefore connects to the **shared production database**. §12 #13. |
 | Frontend tests | Vitest + React Testing Library; Playwright for checkout | **Open** |
-| Local database | Docker Compose for MariaDB | **Open.** §7.2 found a working shared MariaDB; whether local work points at that or at a local container is undecided. |
+| Local database | Docker Compose for MariaDB | **Decided by default, and not well.** `.env.dev` points local runs *and local tests* at the shared MariaDB on the server, because that is the database that exists. A local container or Testcontainers would isolate it; neither is in place. §12 #13. |
 | Repo layout | One repo: `backend/` and `frontend/` | **Diverged.** The backend was scaffolded at the **repository root** — `pom.xml` and `src/` are top-level, there is no `backend/`. Where the frontend lives is therefore open again; see §5.1. |
 
 **Accept all recommendations, or state your changes:**
@@ -406,7 +412,8 @@ two traps below.
 | Spring Boot | 4.2.0 |
 | Build tool / packaging | Maven / `jar` |
 
-Dependencies, exactly as they stand in `pom.xml`:
+Dependencies, exactly as they stand in `pom.xml` — the bottom three were added
+on 2026-11-24 for the database connection (§5.3):
 
 | Dependency | Scope | Why it is there |
 |---|---|---|
@@ -416,6 +423,15 @@ Dependencies, exactly as they stand in `pom.xml`:
 | `spring-boot-devtools` | `runtime`, `optional` | Local restart on recompile |
 | `spring-boot-starter-webmvc-test` | `test` | MockMvc slice tests |
 | `spring-boot-starter-actuator-test` | `test` | Actuator slice |
+| `spring-boot-starter-data-jpa` | compile | Hibernate, Spring Data, the transaction manager and HikariCP — the persistence layer §5 chose (§5.3) |
+| `mariadb-java-client` | `runtime` | The JDBC driver. **`runtime`, not compile: nothing in the source imports it**, so the compiler has no business seeing it. |
+| `spring-boot-starter-data-jpa-test` | `test` | The JPA test slice, so repository tests do not need the full context when there are repositories to test |
+
+**The artifact ids were taken from Spring Initializr for Boot 4.2.0, not from
+memory.** Boot 4 renamed starters (`web` → `webmvc`, and the `*-test` starters
+are new in this line), so guessing a coordinate from a Boot 3 tutorial produces
+a pom that does not resolve — the same class of failure as the
+`4.2.0.RELEASE` trap above.
 
 **Two traps, written down because they will recur:**
 
@@ -454,24 +470,30 @@ Note the paths: the backend sits at the repository root, not under `backend/` as
 §5 proposed. Nothing depends on that yet, but it reopens the question of where a
 frontend would live.
 
-`application.yaml` holds five things and no secrets: the application name
+`application.yaml` holds six things and no secrets: the application name
 (`resibo`); `spring.config.import:
 optional:file:.env.${APP_ENV:dev}[.properties]`, which loads a per-environment
 env file from the working directory — `APP_ENV` picks it, `dev` by default, and
-`optional:` means a missing file is not a startup failure; `server.port:
+`optional:` means a missing file is not a startup failure; the **datasource and
+JPA block** added on 2026-11-24, which has its own section because its defaults
+and its `ddl-auto` setting are load-bearing (§5.3); `server.port:
 ${SERVER_PORT:8080}`, so the port is an environment override with a sane
 default; the actuator exposure
 (`management.endpoints.web.exposure.include: health,info` and
 `management.endpoint.health.show-details: when-authorized`, so an anonymous
-caller learns liveness and nothing else); and `logging.level.com.api.resibo:
-INFO`.
+caller learns liveness and nothing else — it now also reports database
+reachability, so hiding the details from anonymous callers matters more than it
+did); and `logging.level.com.api.resibo: INFO`.
 
 The env files that go with it: **`.env.example` is committed and carries names
 only**, as §8 promised; `.env.dev`, `.env.prelive` and `.env.prod` are
 git-ignored. They are parsed as a `.properties` file, which is a real
 constraint worth remembering — no `export`, no shell expansion, no quotes
-around values. Nothing in any of them is secret today: the datasource keys are
-present but commented out, because the application has no datasource.
+around values. **This has stopped being a file of harmless values.** The five
+keys are `SERVER_PORT`, `DATASOURCE_URL`, `DATABASE_USERNAME`,
+`DATABASE_PASSWORD` and `DB_POOL_MAX`, the datasource keys are no longer
+commented out, and `DATABASE_PASSWORD` is a real credential — so `.env.dev` is
+now exactly the kind of file the §8 rules exist for.
 
 **The API surface, such as it is.** `HealthController` carries
 `@RequestMapping("api/health")` and `@GetMapping("/check")` — so `GET
@@ -536,8 +558,9 @@ outside the checkout. `SERVER_PORT` is forced to `8080` inside the container,
 reinforcing the rule above. Ports publish as `127.0.0.1:${HOST_PORT:-8083}:8080`
 — **loopback only, never on the LAN**; the only thing that may reach the
 container is nginx on the same host. `extra_hosts:
-host.docker.internal:host-gateway` is present and currently unused, ready for
-the day the container has to reach the host's MariaDB. Logging is capped —
+host.docker.internal:host-gateway` is present so the container can reach
+services on the host — which, since 2026-11-24, is no longer hypothetical: the
+container needs a route to the host's MariaDB (§5.3). Logging is capped —
 `json-file`, 10 MB × 3 — because the server hosts several applications and none
 of them should be able to fill the shared disk.
 
@@ -550,6 +573,171 @@ this file cannot invalidate the dependency cache layer.
 One pleasant side effect: the `JAVA_HOME`-in-every-shell friction described
 above is a local-development problem only. It does not exist in the container
 or on the server.
+
+### 5.3 The database connection (2026-11-24)
+
+Committed as `9b57c2b`, with a follow-up documentation note in `bfafb3a`. This
+is the first thing in the project that can damage data belonging to other
+people, which is why it gets its own section rather than a row in a table.
+
+**What it is, in one line:** the application opens a HikariCP pool to the
+`resibo` schema on the shared MariaDB instance (§7.2), as a dedicated
+least-privilege account, with Hibernate forbidden from issuing a single DDL
+statement. **What it is not:** persistence. There are no entities, no
+repositories, no tables and no migrations — the pool connects to an empty
+schema and the application still serves only health endpoints.
+
+#### The datasource block
+
+Three dependencies carry it, listed in §5.1's table: the JPA starter, the
+MariaDB driver at `runtime` scope, and the JPA test starter. The configuration
+lives in `application.yaml`:
+
+| Key | Value | Why |
+|---|---|---|
+| `spring.datasource.url` | `${DATASOURCE_URL}` | **No default, deliberately** — see below |
+| `spring.datasource.username` | `${DATABASE_USERNAME}` | as above |
+| `spring.datasource.password` | `${DATABASE_PASSWORD}` | as above |
+| `spring.datasource.driver-class-name` | `org.mariadb.jdbc.Driver` | Explicit, so a missing driver fails at startup with a name rather than a guess |
+| `spring.datasource.hikari.pool-name` | `resibo-pool` | A named pool is findable in a log and in `information_schema.processlist` on a shared instance |
+| `spring.datasource.hikari.maximum-pool-size` | `${DB_POOL_MAX:10}` | Tunable per environment; 10 is the Hikari default and nothing yet justifies a different number |
+| `spring.datasource.hikari.connection-timeout` | `10000` (ms) | **Fail fast rather than hang.** A till that cannot reach the database must learn that immediately; a checkout request that blocks indefinitely is worse than one that errors in ten seconds |
+| `spring.jpa.hibernate.ddl-auto` | `none` | The rule below |
+| `spring.jpa.open-in-view` | `false` | Keeps the persistence context out of the view layer. Left at Spring's default (`true`) a connection is held for the whole request and lazy loads happen during serialisation — the usual cause of mystery pool exhaustion, and on a shared instance the pool is not ours alone to exhaust |
+
+**No dialect is configured.** Hibernate auto-detects `MariaDBDialect` from the
+connection, and the startup log says so, which is a better check than a property
+asserting it.
+
+**The three datasource values have no defaults on purpose.** A missing
+configuration therefore **fails startup, loudly**, instead of silently falling
+back to an embedded database or to whatever happens to be on `localhost:3306`.
+On an instance that also hosts unrelated project databases (§7.2), "connected
+to something unintended" is the failure worth engineering against, and a
+startup error is the cheapest possible way to find out. Do not add defaults to
+these three keys to make a test or a container start more conveniently — fix the
+environment instead.
+
+#### `ddl-auto: none` — the rule that does not get relaxed
+
+The owner's explicit instruction, and it stays. Two reasons, the second of which
+is the one that matters:
+
+1. **The schema is owned outside the application**, the same arrangement as
+   gainsoclock. Whatever creates tables — Flyway, a hand-run script, a person
+   with the superuser — is not Hibernate.
+2. **If §2.3 comes back as B (BIR-registered receipts), an ORM silently
+   altering the sales tables is precisely the class of change that destroys an
+   audit trail.** An auditor cannot be told that a column changed because a
+   field was renamed in Java and the application reshaped the table at startup.
+   A POS that issues official receipts needs its schema changes to be
+   deliberate, reviewable, and attributable to a human.
+
+> ⚠️ **`spring.jpa.hibernate.ddl-auto` must never be set to `update`, `create`
+> or `create-drop`, in any environment, including a developer's.** `update` is
+> the dangerous one, because it looks helpful: it will quietly alter a live
+> sales table to match a changed entity. If a schema change is needed, write it
+> as SQL, review it, and run it deliberately (§12 #15).
+
+Verified rather than trusted: **zero DDL statements appear in the application
+log, and the `resibo` schema still contains zero tables after the application
+has run** — locally and on the server.
+
+#### Environment keys
+
+Five, and the names are not arbitrary: **they match gainsoclock's `.env`
+exactly**, so the two projects stay interchangeable in a session's head and in a
+server operator's.
+
+| Key | Purpose | Default if unset |
+|---|---|---|
+| `SERVER_PORT` | Port the API listens on | `8080` |
+| `DATASOURCE_URL` | JDBC URL for the `resibo` schema | **none — startup fails** |
+| `DATABASE_USERNAME` | The application's database account | **none — startup fails** |
+| `DATABASE_PASSWORD` | Its password | **none — startup fails** |
+| `DB_POOL_MAX` | Hikari maximum pool size | `10` |
+
+Where the values live, per §8: `.env.example` is committed and carries the
+**names only**; `.env.dev` is git-ignored and carries local values; the server
+reads `/opt/resibo/resibo.env`, mode `0600`, outside the checkout. **No URL and
+no password appears in this document**, because the repository is public (§7.2).
+The account *name* does appear, below: it is a design fact, not a credential.
+
+**`.env.dev` now sets `SERVER_PORT=8083`, not 8088.** The old value was eloms'
+port on the server, which made every local-versus-deployed comparison
+misleading for no benefit. Local and deployed now agree on 8083, and the earlier
+warning about the 8088 trap in §7.3 is resolved rather than live.
+
+#### The least-privilege database account
+
+This resolves §8.1 risk 2. A dedicated account was created on the shared
+instance, and the application no longer connects as the superuser:
+
+```sql
+CREATE USER 'resibo'@'%' IDENTIFIED BY <redacted>;
+GRANT ALL PRIVILEGES ON `resibo`.* TO 'resibo'@'%';
+```
+
+The resulting grants are exactly `USAGE ON *.*` plus `ALL PRIVILEGES ON
+resibo.*` — **no global rights, and deliberately no `WITH GRANT OPTION`**, so
+the account cannot widen its own access even if something inside Resibo is
+compromised. The superuser is now reserved for migrations and backups run by a
+person, and is not used by the application in any environment.
+
+Isolation was proven by direct probing, not inferred from the grant statement:
+
+| Probe | Result |
+|---|---|
+| Databases the account can see | `information_schema` and `resibo`, and nothing else |
+| `CREATE TABLE` / `INSERT` / `DROP` inside `resibo` | Succeed — it owns its own schema completely |
+| Reads against `gainsoclock`, `eloms`, `mysql` | **Denied**, `ER_TABLEACCESS_DENIED_ERROR` |
+| `CREATE DATABASE` | **Denied** |
+| `CREATE USER` | **Denied** |
+
+**What remains, and is not done:** the host part is `%`, so the account is
+connectable from any host that can reach the port. Narrowing it — to the
+container's gateway, or to localhost — is a further hardening step, recorded as
+§12 #14 rather than claimed. It is a smaller risk than the one just closed:
+reaching the port at all requires being on the LAN.
+
+#### The test datasource, and CI
+
+The Spring context test now needs a datasource to start, which turns "where do
+tests get a database?" into a question with consequences.
+
+**CI answers it with a throwaway container.** The `build` job in
+`.github/workflows/ci.yml` gained a **MariaDB 11 service container** — database
+`resibo_test`, health-gated with
+`healthcheck.sh --connect --innodb_initialized` — plus job-level
+`DATASOURCE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` and `SERVER_PORT`
+pointing at it. The reason is structural: **the real database sits on a private
+network that GitHub-hosted runners cannot reach**, so CI could not use it even
+if that were a good idea. Same approach as gainsoclock's `maven.yml`.
+
+**Those credentials are deliberately not GitHub Secrets.** They are root/test
+on a container created for one job and destroyed minutes later, on a runner
+nobody else shares. Nothing is gained by hiding them, and a repository full of
+secrets that are not secret makes the ones that are harder to take seriously.
+The §8 rule is about credential **values that grant access to something that
+outlives the job** — this is not one.
+
+**A local `mvnw verify` has no such isolation.** It loads `.env.dev`, so it
+connects to the shared production database. Nothing writes today, because there
+are no entities, but that is a property of the code being empty rather than of
+the setup being safe. §5 already recommended Testcontainers; this is what makes
+it concrete, and it is recorded as an open question (§12 #13) rather than a
+footnote.
+
+#### Verified, not assumed (2026-11-24)
+
+| Check | Result |
+|---|---|
+| Local `./mvnw -B clean verify` | **BUILD SUCCESS**, 2/2 tests. Hikari connected; the log reports `Database dialect: MariaDBDialect` |
+| `GET /actuator/health` with details | `db: {status: UP, database: MariaDB, validationQuery: isValid()}` |
+| DDL issued by the application | **None.** Zero DDL statements in the log, and the `resibo` schema still holds **0 tables** after a run — `ddl-auto: none` proven, not assumed |
+| Isolation of the `resibo` account | Probed directly; results in the table above |
+| On the server after redeploy | Container `Up (healthy)`, zero DDL, and `information_schema.processlist` showed **10 live connections from the container as user `resibo` on database `resibo`**, with the superuser holding none — the account switch is confirmed in production, not merely configured |
+| Public endpoint through the tunnel | Still `200` |
 
 ---
 
@@ -709,7 +897,7 @@ the reference project read consistently, and none of them conflict with §6.1.
 | Boilerplate | Lombok `@Data` / `@NoArgsConstructor` / `@AllArgsConstructor` on DTOs |
 | Shared helpers | `utilities/` for stateless static helpers |
 | Config | `application.yaml`; `.env` and `.env.*` git-ignored |
-| Deployment | `scripts/deploy.sh`, `scripts/deploy-prelive.sh`; GitHub Actions at `.github/workflows/maven.yml` |
+| Deployment | `scripts/deploy.sh`, `scripts/deploy-prelive.sh`; a GitHub Actions workflow (gainsoclock's is `maven.yml`; Resibo's is `ci.yml`) |
 
 **Which of those exist as of 2026-11-24.** Implemented: the `ResponseDto`
 envelope and its fields; `ResponseUtility.getSuccessResponse(message[, data])`
@@ -724,15 +912,17 @@ the first stack frame outside itself — cleaner than gainsoclock's approach, sa
 result, and verified to resolve correctly (§5.1).
 
 Added since, and recorded elsewhere in this document: `scripts/deploy.sh` in
-gainsoclock's shape (§7.3), and the committed `.env.example` the §8 rules
-promised, carrying variable names with empty values (§5.1).
+gainsoclock's shape (§7.3), the committed `.env.example` the §8 rules promised,
+carrying variable names with empty values (§5.1, §5.3), and a GitHub Actions
+workflow — `.github/workflows/ci.yml`, not gainsoclock's `maven.yml` filename —
+whose `build` job runs `mvnw -B clean verify` against a throwaway MariaDB
+service container (§5.3).
 
 Not yet present, and not yet contradicted either: the interface +
 `XxxServiceImpl` service shape and "every service method returns `ResponseDto`"
 (there are no services), the `XxxDto` / `XxxListDto` pairing (there is one DTO),
-error codes beyond `S0001`, `scripts/deploy-prelive.sh` (no prelive environment
-has been decided — §7, §12 #11), and the GitHub Actions workflow (deployment is
-deliberately manual for now — §7.3).
+error codes beyond `S0001`, and `scripts/deploy-prelive.sh` (no prelive
+environment has been decided — §7, §12 #11).
 
 | Question | My recommendation | Your decision |
 |---|---|---|
@@ -788,23 +978,24 @@ MariaDB   ──►  nightly backup, off-machine   [see §10]
 
 Production exists as of 2026-11-24, and the honest version of the table is
 below. **"Production" here means the skeleton is reachable, not that there is a
-product behind it** — it serves the two health endpoints and nothing else,
-because the application still connects to no database.
+product behind it** — it serves the two health endpoints and nothing else. It
+now also holds a connection pool to an **empty** schema (§5.3), which is a
+different statement from storing anything.
 
-| | Local | Staging / prelive | Production |
-|---|---|---|---|
-| Needed? | yes | probably, eventually — §12 #11 | yes |
-| Status | working | **not built** | **live since 2026-11-24** |
-| Where it runs | this machine, from `mvnw` or from the container | — | the shared Ubuntu server, in Docker behind the host's nginx |
-| Database | none — the application has no datasource (§5) | — | **none.** Not "not configured": there is no JPA, no driver, no schema in use |
-| URL | `http://localhost:8080`, or `:8088` with the current `.env.dev` | — | `https://resibo-api.polbinsenthabyer.uk` |
-| What it serves | `/api/health/check` and `/actuator/health` | — | the same two endpoints, and nothing else |
+| | Local | CI | Staging / prelive | Production |
+|---|---|---|---|---|
+| Needed? | yes | yes | probably, eventually — §12 #11 | yes |
+| Status | working | **working since 2026-11-24** | **not built** | **live since 2026-11-24** |
+| Where it runs | this machine, from `mvnw` or from the container | a GitHub-hosted runner, `.github/workflows/ci.yml` | — | the shared Ubuntu server, in Docker behind the host's nginx |
+| Database | **the shared MariaDB on the server**, via `.env.dev` — the same instance production uses, which is the problem recorded as §12 #13 | a throwaway MariaDB 11 service container, `resibo_test` (§5.3) | — | **the `resibo` schema on the shared MariaDB**, as the least-privilege `resibo` account. **0 tables** — connected, empty, and read by nothing |
+| URL | `http://localhost:8083` with the current `.env.dev`, `:8080` without it | — | — | `https://resibo-api.polbinsenthabyer.uk` |
+| What it serves | `/api/health/check` and `/actuator/health` | nothing — it builds and tests | — | the same two endpoints, and nothing else |
 
 | Question | Answer |
 |---|---|
 | Server | Self-hosted on the owner's LAN, Ubuntu, shared with the sibling projects. Address, account, and password are in the handover file (§8) — **deliberately not written here, because this repository is public.** |
 | Server OS / specs | Ubuntu (version still unconfirmed — not needed now that the build runs in a container) |
-| How we deploy (git pull + restart / Docker / CI pipeline) | **Docker, manually, from a git checkout on the server.** `git pull` then `scripts/deploy.sh`, which builds the image on the server, restarts, health-gates, and rolls back on failure. No CI pipeline. Full procedure in §7.3. |
+| How we deploy (git pull + restart / Docker / CI pipeline) | **Docker, from a git checkout on the server** — `git pull` then `scripts/deploy.sh`, which builds the image there, restarts, health-gates, and rolls back on failure. Full procedure in §7.3. `.github/workflows/ci.yml` now exists: its `build` job is the test gate (and the reason for the CI service container, §5.3), and it **declares** a `deploy` job that runs the same `scripts/deploy.sh` on a self-hosted runner labelled `resibo-deploy`. The manual command in §7.3 is still the documented path, and the CI-driven one is not described there — see §12 #16. |
 | Domain name | `resibo-api.polbinsenthabyer.uk` — a subdomain of the zone that already serves the sibling projects. No new domain was bought. |
 | Cloudflare role: DNS only / proxied / Tunnel / Access in front of admin | **Proxied DNS over a Cloudflare Tunnel.** The existing `personal-projects` tunnel is reused rather than a new one created; a `CNAME` points the hostname at it. **Access is not in front of anything** — the API is open to the internet, which is tolerable only while it serves health checks. Revisit before the first real endpoint. |
 | TLS: Cloudflare origin cert / Let's Encrypt | **Neither.** TLS terminates at Cloudflare's edge and the tunnel carries the request to the origin, so the origin holds no certificate: nginx listens on plain HTTP on loopback, and the container is published on loopback. Nothing on the LAN speaks TLS and nothing needs to. |
@@ -877,7 +1068,9 @@ What was actually tested, not assumed:
 | Database connection | **Working**, verified with a real query |
 | MariaDB version | 11.8.6-MariaDB-5ubuntu0.1 (Ubuntu) |
 | Server charset / collation | `utf8mb4` / `utf8mb4_uca1400_ai_ci` |
-| `resibo` schema | Exists, and is **empty** — no tables |
+| `resibo` schema | Exists, and is **still empty** — no tables, even after the connected application has run (§5.3) |
+| Least-privilege `resibo` account | **Created and in use 2026-11-24.** Grants are `USAGE ON *.*` plus `ALL PRIVILEGES ON resibo.*`, no `GRANT OPTION`; isolation probed, not inferred (§5.3). Resolves §8.1 risk 2 |
+| The application's connection, from production | `information_schema.processlist` showed **10 connections from the container as `resibo` on database `resibo`**, superuser none (§5.3) |
 | Shared host | ⚠️ The same MariaDB instance also hosts unrelated databases for other projects |
 | GitHub repository visibility | ⚠️ **Public** — confirmed via the GitHub API |
 
@@ -887,12 +1080,16 @@ What was actually tested, not assumed:
    in history. No infrastructure addresses, usernames, or internal hostnames go
    into it — hence the redaction in the table above. Verified 2026-11-24 that no
    credential value appears in any commit on any branch.
-2. **The database is shared with other projects.** Connecting as `root` means a
-   bug in Resibo can read or destroy unrelated project data. This turns §8's
-   "use a least-privilege app user" from good practice into the actual fix.
+2. **The database is shared with other projects, and that is why the
+   application does not connect as the superuser.** A bug in Resibo running as
+   `root` could read or destroy unrelated project data; §8's "use a
+   least-privilege app user" was therefore the actual fix rather than good
+   practice, and it was **done on 2026-11-24** (§5.3, §8.1 risk 2). What is left
+   of the risk is the account's `%` host part (§12 #14), not its privileges.
 3. **The `resibo` schema is empty**, so there is no legacy structure to work
    around — the schema in §4 can be designed freely once the blockers are
-   answered.
+   answered. It stays empty on purpose: `ddl-auto: none` means the application
+   will not create a table even now that it is connected (§5.3).
 
 **Open:** Ubuntu version, and whether MariaDB should stay shared or get a
 dedicated instance for Resibo. The server's JDK is no longer open and no longer
@@ -907,15 +1104,17 @@ neighbouring services down silently.
 **What is deployed is the skeleton.** Docker container on the shared Ubuntu
 server, reverse-proxied by the host's nginx, fronted by the Cloudflare tunnel
 that already serves the sibling projects. It answers `/api/health/check` and
-`/actuator/health`. It connects to no database, has no authentication, and
-implements no part of a POS.
+`/actuator/health`. Since 2026-11-24 it also holds a connection pool to the
+empty `resibo` schema as the least-privilege `resibo` account (§5.3) — which
+changes what the deployment needs in its env file, and nothing about what it
+serves. It has no authentication and implements no part of a POS.
 
 #### On the server
 
 | Path or object | What it is |
 |---|---|
 | `/opt/resibo/app` | A git checkout of `dev/api/resibo`. Cloning needed no credential, because the repository is public (§7.2) — the one convenience that awkward fact buys. |
-| `/opt/resibo/resibo.env` | The environment file, mode `0600`, **outside the checkout and not in git**. It holds `APP_ENV=prod` and nothing else today; there is no secret for it to hold yet. |
+| `/opt/resibo/resibo.env` | The environment file, mode `0600`, **outside the checkout and not in git**. As of 2026-11-24 it holds `APP_ENV=prod` **and the datasource keys** — `DATASOURCE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` (§5.3). It is therefore a real secret store now, not a one-line convenience: the `0600` mode and its location outside the checkout stopped being precautionary. Without it the application does not start at all, because the datasource keys have no defaults. |
 | Image `resibo-api:current` | What is running. `:previous` is kept for rollback; `:next` is the staging tag used during a deploy. |
 | Container `resibo-api` | `restart: unless-stopped`, published on `127.0.0.1:8083`, reported `Up (healthy)`. |
 | `/etc/nginx/sites-available/resibo` | The vhost, symlinked into `sites-enabled`. |
@@ -965,6 +1164,17 @@ cd /opt/resibo/app
 docker tag resibo-api:previous resibo-api:current
 RESIBO_TAG=current docker compose up -d --no-build
 ```
+
+**Two more scripts exist and are only named here, not yet described.** Recorded
+so no session concludes `deploy.sh` is all there is: `scripts/rollback.sh`
+performs exactly the manual swap above — for the case where the deploy
+succeeded, health passed, and the build turned out to be bad anyway — and
+`scripts/setup-server.sh` is an idempotent server bootstrap that creates the
+deployment directory, the env file, the nginx vhost, and a **self-hosted GitHub
+Actions runner** labelled `resibo-deploy`. The runner is the other half of the
+CI `deploy` job, and the whole CI-driven path is the documentation gap tracked
+as §12 #16. Until that is closed, the manual command above is the procedure of
+record.
 
 #### The nginx vhost
 
@@ -1023,11 +1233,12 @@ All of them loopback-bound. Two things to keep straight:
 
 - **The container always listens on 8080 internally** (§5.2), whatever the host
   port. 8083 is purely a host-side mapping, set by `HOST_PORT`.
-- The local `.env.dev` currently sets `SERVER_PORT=8088`, which is **eloms'
-  port on the server**. It is harmless as it stands — nothing reads `.env.dev`
-  on the server, where `HOST_PORT` decides the mapping — but do not copy that
-  value into a server env file, and do not read a local `:8088` as evidence of
-  anything about production.
+- **The local `.env.dev` sets `SERVER_PORT=8083`, matching the host port the
+  server publishes.** It used to set 8088, which is **eloms' port** — harmless,
+  because nothing reads `.env.dev` on the server, but it made every
+  local-versus-deployed comparison read wrong. That was corrected on 2026-11-24
+  (§5.3); the earlier warning here is **resolved**, not live. 8088 is still
+  eloms', so it remains a value never to put in a Resibo env file.
 
 #### Verified end to end from the public internet
 
@@ -1041,6 +1252,7 @@ Already verified on 2026-11-24, not inferred:
 | Through nginx by `Host` header, on the server | `200` |
 | gainsoclock API, after the tunnel change | `200` — unaffected |
 | eloms API, after the tunnel change | `401`, which is its normal unauthenticated response — unaffected |
+| After the database redeploy (2026-11-24) | Container `Up (healthy)`, zero DDL in the log, **10 connections from the container as `resibo` on database `resibo`** and none from the superuser, and the public endpoint still `200` through the tunnel (§5.3) |
 
 **Two things the deployment did not fix, and was not meant to.** The §10 UTC
 `responseTime` defect is now live in production — the verified response read
@@ -1082,8 +1294,9 @@ My proposal, to be confirmed:
   there is one host and one container, and a `0600` file is the simpler thing
   that is no weaker here. `.dockerignore` keeps every `.env*` out of the image
   so the file is never baked in (§5.2).
-- The database user the application connects as gets **only the grants it needs**.
-  It is not `root`.
+- **Decided and in place (§5.3):** the database user the application connects as
+  gets **only the grants it needs** — `USAGE ON *.*` plus `ALL PRIVILEGES ON
+  resibo.*`, no `GRANT OPTION`. It is not the superuser, in any environment.
 - The Cloudflare API token is **scoped to the single zone**, with the narrowest
   permissions that work.
 - GitHub access uses a credential helper or a deploy key — never a token in a
@@ -1108,11 +1321,13 @@ All values supplied so far live in one git-ignored file outside every repository
 |---|---|---|---|
 | GitHub repository access | push, clone, CI | Git Credential Manager (already working) | ✅ working |
 | Server SSH account | deploy, administer | `resibo.env` → `RESIBO_SERVER_*` | ✅ **used successfully** for the §7.3 deployment, 2026-11-24. Key-based access remains the goal, and the value still needs rotating — §8.1 risk 1. |
-| Database admin user (`root`) | currently the only DB access | `resibo.env` → `RESIBO_DB_*` | ✅ **connection verified** 2026-11-24 |
-| Database app user | application connection, least privilege | not created | ❌ **to create — see risk 2 below** |
+| Database admin user (superuser) | **migrations and backups only, run by a person** — no longer the application's account | `resibo.env` → `RESIBO_DB_*` | ✅ connection verified 2026-11-24, and **retired from application use** the same day (§5.3). Still needs rotating — §8.1 risk 1 |
+| Database app user (`resibo`) | the application's connection, least privilege | the per-environment env file → `DATABASE_USERNAME` / `DATABASE_PASSWORD`; on the server `/opt/resibo/resibo.env` | ✅ **created and in use 2026-11-24.** Grants and probed isolation in §5.3. The account **name** is a design fact and is written here on purpose; the password is not, anywhere |
 | Cloudflare API token | DNS records and tunnel configuration | handover file | ✅ **working** 2026-11-24 — created for and used by the §7.3 deployment. **Scoped to** Account → Cloudflare Tunnel:Edit, Zone → DNS:Edit, Zone → Zone:Read, on the one zone and no other. |
 | Cloudflare account | DNS, tunnel | reached through the scoped token above; no interactive login needed | ✅ working |
-| Server application env file | per-environment configuration for the container | `/opt/resibo/resibo.env` on the server, mode `0600`, outside the checkout | ✅ in place — holds `APP_ENV=prod` and nothing else. No secret in it yet, because nothing the application reads is one. |
+| Server application env file | per-environment configuration for the container | `/opt/resibo/resibo.env` on the server, mode `0600`, outside the checkout | ✅ in place — and since 2026-11-24 it holds `APP_ENV=prod` **plus the datasource URL, username and password** (§5.3). It is now the one file on the server that must not leak, and the application will not start without it. |
+| Local development env file | local configuration, including the database password | `.env.dev` in the working copy — git-ignored, and `.dockerignore`d under any name | ✅ in place, and **no longer value-free**: it carries a real `DATABASE_PASSWORD` and points at the shared instance (§12 #13). |
+| CI database credentials | the throwaway MariaDB service container in `.github/workflows/ci.yml` | **in the workflow file, in plain sight, deliberately** | ✅ working — and **intentionally not a GitHub Secret**: the container is created for one job and destroyed with it, so there is nothing to protect (§5.3, §13). |
 | Domain registrar login | domain ownership | | not yet provided |
 | JWT signing key | session tokens | generate per environment | not created |
 | SMTP / email provider | receipts, password reset | | not decided |
@@ -1136,22 +1351,37 @@ works. Verified 2026-11-24: no credential value appears in any commit on any
 branch, so the exposure is to the session transcript only, not to the public
 repository.
 
-**2. The application must not connect to MariaDB as `root`.** Three reasons
-compound here: `root` is authenticated as `root@%` (connectable from any host),
-the same instance hosts unrelated project databases, and the password is reused
-with the SSH account. Any one of those is tolerable; together, a single SQL
-injection in Resibo reaches every other project on that server.
+**2. ✅ RESOLVED 2026-11-24 — the application no longer connects to MariaDB as
+the superuser.** The risk as originally written: three things compounded — the
+superuser is authenticated from any host, the same instance hosts unrelated
+project databases, and its password is reused with the SSH account. Any one is
+tolerable; together, a single SQL injection in Resibo reached every other
+project on that server.
 
-> **Proposed fix:** create a dedicated user granted only what it needs on
-> `resibo.*` — no `GRANT OPTION`, no access to other schemas, and not
-> connectable from `%`. Keep `root` for migrations and backups only, run by a
-> person. I have **not** done this; creating a database user on a shared server
-> affects other projects, so it is your call.
+> **What was done** (§5.3): a dedicated `resibo` account was created and the
+> application switched to it in every environment. Its grants are exactly
+> `USAGE ON *.*` plus `ALL PRIVILEGES ON resibo.*`, with **no `WITH GRANT
+> OPTION`**, so it cannot widen its own access. Isolation was **probed, not
+> assumed**: it sees only `information_schema` and `resibo`, it can do anything
+> inside `resibo`, and reads against `gainsoclock`, `eloms` and `mysql` all fail
+> with `ER_TABLEACCESS_DENIED_ERROR`, as do `CREATE DATABASE` and `CREATE USER`.
+> Production was checked after the redeploy: 10 connections as `resibo`, none as
+> the superuser. The superuser is now reserved for migrations and backups run by
+> a person.
 >
-> **Decision needed:**
+> **What remains, and is not claimed as fixed:** the account's host part is
+> `%`, so it is connectable from anywhere that can reach the port — which, since
+> nothing Resibo runs is on the LAN and the port is not published to the
+> internet, means from the LAN. Narrowing it to the container's gateway or to
+> localhost is a further hardening step, **not done**, tracked as §12 #14.
+> Risk 1 and risk 3 below are untouched by any of this: the superuser's password
+> is still the exposed, reused one, and still needs rotating.
 
-**3. The password is reused between the SSH account and the database.** One
-compromise becomes two. Recommend different values at rotation time.
+**3. The password is reused between the SSH account and the database
+superuser.** One compromise becomes two. Recommend different values at rotation
+time. The new `resibo` application account is separate from both, so this is now
+a question about the two administrative credentials rather than about the
+application.
 
 **4. The repository is public.** Infrastructure addresses and usernames stay out
 of it, including out of this file. If the project would rather keep its planning
@@ -1159,6 +1389,14 @@ private, making the repository private is the simpler fix than redacting
 documentation forever.
 
 > **Decision needed:** keep the repository public, or make it private?
+
+**5. A local `mvnw verify` connects to the shared production database.** Since
+2026-11-24 the Spring context test needs a datasource, and locally it gets the
+one in `.env.dev` — which points at the same instance and the same schema
+production uses. CI is isolated by its own throwaway container (§5.3); a
+developer's machine is not. Nothing writes today only because there are no
+entities. The fix is Testcontainers or a local MariaDB container, and it is
+recorded as §12 #13 rather than left as a habit.
 
 ---
 
@@ -1184,7 +1422,7 @@ tax summary for filing · statutory-discount summary.
 |---|---|
 | Acceptable downtime | |
 | Target time to ring up one item (scan or keystroke to line on screen) | |
-| Backup frequency, and where backups are stored | **Still open.** Nothing is backed up, and as of 2026-11-24 there is nothing stateful to back up: the deployed application connects to no database, and the only state on the server is a git checkout and a one-line env file (§7.3, §11). This row becomes urgent on the day persistence lands, not after. |
+| Backup frequency, and where backups are stored | **Still open, and one step closer to urgent.** Nothing is backed up. There is still nothing stateful to back up — the `resibo` schema holds **0 tables** even though the application is now connected to it (§5.3) — so the deadline has not arrived; but the on-server state is no longer a git checkout and a one-line env file. `/opt/resibo/resibo.env` now carries the datasource credentials and exists nowhere else on the server (§7.3), which makes it the first thing on that machine whose loss costs something. This row becomes urgent the day the first table is created, which is also the day a restore test stops being theoretical. |
 | Has a restore ever been tested? (It is not a backup until it has.) | No — there is no backup to restore. |
 | How long sales data must be retained | |
 | Interface language(s) | |
@@ -1211,17 +1449,21 @@ and judge.
 | 7 | Reports from §9 | §9 |
 | 8 | Server, domain, deployment, backups | §7, §8 |
 
-**Where this stands (2026-11-24).** Phase 1 is **partially delivered**. Done:
-the application skeleton, a working Maven build, the `ResponseDto` conventions,
-a health endpoint, and two passing tests — all verified in §5.1. Not done, and
-not started: the MariaDB connection (the pom has no JDBC driver and no JPA, so
-the application talks to no database at all), Flyway and the first migration,
-login, and roles. Boundary tests are not merely undone but currently moot —
-§6.1.1 went to layer-first, so there are no module boundaries to test.
+**Where this stands (2026-11-24).** Phase 1 is **partially delivered, and moved
+once since**. Done: the application skeleton, a working Maven build, the
+`ResponseDto` conventions, a health endpoint, two passing tests (§5.1), and —
+as of 2026-11-24 — **the MariaDB connection** (§5.3): JPA starter, driver,
+Hikari pool, a least-privilege account, and `ddl-auto: none`. Not done, and not
+started: Flyway and the first migration, any entity or repository, login, and
+roles. Boundary tests are not merely undone but currently moot — §6.1.1 went to
+layer-first, so there are no module boundaries to test.
 
-Of what remains in phase 1, migrations wait on the §4 schema, which waits on the
-§2 blockers; login and roles wait on §1.3. The database connection itself is the
-one piece that could move now.
+"The database connection was the one piece that could move now" was the previous
+version of this paragraph, and it moved. **It moved alone**: the pool connects
+to an empty schema, so the application reads and writes nothing. Of what remains
+in phase 1, migrations wait on the §4 schema, which waits on the §2 blockers;
+login and roles wait on §1.3. The next piece that could move without an answer
+is choosing the schema's owner — a migration tool, not a table (§12 #15).
 
 **Phase 8 is substantially delivered for the API, out of order (2026-11-24).**
 Done and verified in §7.3: the server, a Docker deployment with a health-gated
@@ -1234,14 +1476,20 @@ pattern works is far cheaper now than during phase 3.
 
 What phase 8 does **not** yet include, so nobody reads the row as finished:
 
-- **Backups.** Nothing is backed up, and nothing yet needs to be: there is no
-  database connection, and the only state on the server is a git checkout and a
-  one-line env file. The §10 backup rows are still blank, and they become urgent
-  the moment persistence lands — not before, and not after.
+- **Backups.** Nothing is backed up, and nothing stateful yet needs to be: the
+  schema the application now connects to holds no tables. What the server does
+  hold, since 2026-11-24, is the datasource credentials in
+  `/opt/resibo/resibo.env` and nowhere else. The §10 backup rows are still
+  blank, and they become urgent the moment the first table exists — not before,
+  and not after.
 - **Prelive / staging.** Not built. gainsoclock has one on port 8082 and a
   `deploy-prelive.sh`; Resibo has neither, and whether it should is §12 #11.
-- **CI.** Deployment is manual by design for now. There is no
-  `.github/workflows/maven.yml`.
+- **CI, past the test gate.** `.github/workflows/ci.yml` exists: its `build` job
+  runs `mvnw -B clean verify` against a throwaway MariaDB service container
+  (§5.3), which is a real gate and the reason the database work needed it. It
+  also declares a `deploy` job on a self-hosted runner. **That path is not
+  documented in §7.3 and is not the procedure a session should follow** — the
+  manual deploy is. §12 #16.
 - **An application worth deploying.** This is the one that matters. The road to
   the public internet is now paved and tested; that moves phases 2 through 7 not
   one step. Every `[BLOCKER]` and the §6.1.1 confirmation are exactly as open as
@@ -1269,6 +1517,10 @@ What phase 8 does **not** yet include, so nobody reads the row as finished:
 | 10 | Suppress `className` / `methodName` on production responses (§6.1.2) | nothing structural — but it is live internal detail on an open endpoint | 2026-11-24 | **open, and its deadline has passed.** §6.1.2 required both fields gone from production error responses "before anything is exposed publicly"; the API went public on 2026-11-24 (§7.3) and still returns them on every response. The fix is cheap; what needs deciding is whether to suppress by environment or everywhere. |
 | 11 | Is a prelive / staging environment wanted (§7, §7.3)? | `scripts/deploy-prelive.sh`, the `/api/health/check/prelive` variant gainsoclock has, and a fourth host port | 2026-11-24 | open — gainsoclock has one on 8082; Resibo deliberately has none, and nothing yet justifies one. |
 | 12 | Should Cloudflare Access, or any edge authentication, sit in front of this hostname before the first non-health endpoint ships (§7)? | whether the first real endpoint can go live as-is | 2026-11-24 | open — tolerable today only because the API serves health checks and holds no data. Distinct from the §1.3 application auth question; this one is at the edge. |
+| 13 | **How do local tests get a database?** Right now `mvnw verify` loads `.env.dev` and connects to the **shared production instance** (§5.3, §8.1 risk 5) | whether a careless test can reach real data; also the Testcontainers row in §5 | 2026-11-24 | **open, and the one new risk the database work introduced.** CI is isolated by its own throwaway container; a developer's machine is not. Harmless only while there are no entities — the moment a repository test writes, it writes to the live instance. §5 already recommends Testcontainers; a local MariaDB container is the cheaper half-measure. Needs a decision before the first repository, not after. |
+| 14 | Narrow the `resibo` database account's host part from `%` (§5.3, §8.1 risk 2) | nothing — it is hardening, not a blocker | 2026-11-24 | open, deliberately not done. The privilege half of §8.1 risk 2 is closed; this is the connectivity half. Reaching the port at all requires LAN access, so it is the smaller remaining exposure. Narrowing it to the container gateway would also need the local developer's route considered — see #13. |
+| 15 | **Who owns the schema?** `ddl-auto: none` means Hibernate will never create a table, and there is no Flyway and no migration (§5, §5.3) | the first table, and therefore every phase from 2 onwards | 2026-11-24 | open. Not urgent — there is nothing to migrate until §4 is settled — but it is now a *gap* rather than an absence: the application is connected to a schema that nothing is responsible for creating. Decide the tool (Flyway was the recommendation) before the first entity, so the first table arrives as a reviewed migration rather than as a hand-run statement nobody recorded. |
+| 16 | The CI `deploy` job is not documented (§7, §7.3, §11) | nothing technical — it is a documentation gap that can mislead a session | 2026-11-24 | open. `.github/workflows/ci.yml` declares a `deploy` job that runs `scripts/deploy.sh` on a self-hosted runner labelled `resibo-deploy`, with `APP_DIR=/opt/resibo`, `HOST_PORT=8083`, `APP_ENV=prod`. §7.3 describes only the manual path, and this document should not have two answers to "how does it deploy". Confirm whether the runner is registered and whether CI deploys are the intended path, then write the winner into §7.3 and a decision into §13. |
 
 ---
 
@@ -1307,6 +1559,13 @@ trivia the next session cannot reuse.
 | 2026-11-24 | **The existing `personal-projects` tunnel is reused, with a new subdomain, rather than creating a new tunnel or buying a domain** (§7.3) | That tunnel was already healthy and already fronting the sibling projects through nginx by `server_name`, which is a pattern that works and that the owner already operates. A second tunnel would mean a second `cloudflared` service to keep running, patch, and monitor, for no benefit — one tunnel fans out to any number of hostnames through the one nginx. A subdomain of the existing zone likewise needs no purchase, no new registrar login, and no new TLS story. The cost is shared fate: a mistake in the tunnel configuration affects every project behind it, which is exactly why the next row exists. | Claude |
 | 2026-11-24 | **Tunnel ingress is changed by read, back up, append, then PUT the complete list — never by PUT-ing one rule** (§7.3) | The Cloudflare tunnel configuration endpoint replaces the whole ingress list; it does not patch it. A `PUT` carrying only Resibo's rule would have silently deleted the rules for gainsoclock, its prelive and eloms, and the failure mode is the dangerous one — the tunnel stays healthy, the neighbours start returning 404, and nothing reports an error. So the prior configuration was saved first, the new rule was appended **before** the `http_status:404` catch-all (a rule after the catch-all can never match), and the neighbours were re-checked afterwards. Written into §7.3 as a procedure rather than a note because the next session will not remember it. | Claude |
 | 2026-11-24 | Cloudflare is accessed by a **scoped API token**, recorded in §8 by its scopes and its location only | Per the standing §8 rule: the plan records what a credential is for and where it lives, never its value. The scopes are the part worth writing down, because they are what limits the damage — Account → Cloudflare Tunnel:Edit, Zone → DNS:Edit, Zone → Zone:Read, on the one zone and no other. A token narrow enough to describe in one line is also narrow enough to hand over without auditing. An interactive OAuth login was abandoned in favour of this, because an agent session has no browser and a token can be rotated without one. | Claude, per §8 |
+| 2026-11-24 | **Persistence is Spring Data JPA, not plain JDBC** — `spring-boot-starter-data-jpa` plus the MariaDB driver at `runtime` scope (§5.3, commit `9b57c2b`) | §5 recommended JPA and nothing has argued against it: the entities in §4 are ordinary relational shapes, gainsoclock uses the same stack so a session moves between the two projects without re-learning anything, and the starter brings the transaction manager and HikariCP that a hand-rolled `DataSource` would otherwise need assembling. The §5 caveat stands — reporting queries will use plain SQL where JPA fights them, which is a reason to keep JPA, not to avoid it. The driver is `runtime` scope because **nothing in the source imports it**, and a dependency the compiler can see is a dependency something will eventually reference by accident. | Claude, per §5 |
+| 2026-11-24 | **`spring.jpa.hibernate.ddl-auto` is `none`, and must never be `update`, `create` or `create-drop` in any environment** (§5.3) | The owner's explicit instruction, and it would be the right answer without one. The schema is owned outside the application, as in gainsoclock, so the thing that creates tables is a reviewed migration or a person — never a side effect of starting the application. The reason it is a rule rather than a preference is §2.3: **if Resibo issues BIR-registered receipts, an ORM silently altering a sales table is exactly the class of change that destroys an audit trail**, and an auditor cannot be told a column changed because a Java field was renamed. `update` is the dangerous setting precisely because it looks helpful. Proven rather than asserted: zero DDL in the log and 0 tables in the schema after the application ran, locally and in production. | Owner, reasoning recorded by Claude |
+| 2026-11-24 | **The three datasource properties have no defaults** (§5.3) | A missing configuration must fail startup loudly rather than connect somewhere unintended. The instance hosts unrelated project databases (§7.2), so a fallback to an embedded database or to whatever answers on `localhost:3306` is not a convenience but a way to write Resibo's data into someone else's schema — or to pass a test suite against nothing. The cost is accepted: every environment, including CI, must supply `DATASOURCE_URL`, `DATABASE_USERNAME` and `DATABASE_PASSWORD`, which is why the CI job sets them explicitly. Adding defaults to make something start more easily is the wrong fix; fix the environment. | Claude |
+| 2026-11-24 | **`spring.jpa.open-in-view` is `false`**, against Spring's default of `true` (§5.3) | Left at the default, the persistence context stays open for the whole request, a pool connection is held while the response is serialised, and lazy loads fire from the view layer — which is the usual cause of pool exhaustion that looks like a mystery. On a shared instance the pool is not ours alone to waste, and on a checkout screen a request that queues behind a held connection is a cashier waiting. Turning it off now also means no code is ever written that depends on it being on, which is the kind of dependency that is cheap to prevent and expensive to remove. | Claude |
+| 2026-11-24 | **A dedicated least-privilege `resibo` database account was created, and the application no longer connects as the superuser** (§5.3; resolves §8.1 risk 2) | The instance is shared with unrelated projects, so a single SQL injection in Resibo running as the superuser reached every other project on the server — the compounding risk §8.1 described. The account holds `USAGE ON *.*` plus `ALL PRIVILEGES ON resibo.*` and **no `WITH GRANT OPTION`**, so it is omnipotent inside its own schema and cannot widen its own access. Isolation was probed rather than inferred: other schemas, `CREATE DATABASE` and `CREATE USER` are all denied. The superuser is kept for migrations and backups run by a person, which is the one use that genuinely needs it. The host part is still `%` and narrowing it is recorded as open (§12 #14) rather than quietly claimed as done. | Owner's call, carried out and verified by Claude |
+| 2026-11-24 | **CI gets a throwaway MariaDB service container, and its credentials are deliberately not GitHub Secrets** (§5.3) | The Spring context test now needs a datasource, and **the real database is on a private network that GitHub-hosted runners cannot reach** — so CI needed a database of its own whether or not isolation was wanted, and isolation is wanted anyway (§12 #13 is about the local case, which has none). MariaDB 11 matches the server's major line closely enough to catch dialect surprises, and the health options (`healthcheck.sh --connect --innodb_initialized`) stop the build racing a container that is listening but not ready. Same approach as gainsoclock's `maven.yml`. The credentials are root/test in plain sight on purpose: the database exists for one job and is destroyed with it, so hiding its password protects nothing — and a repository whose "secrets" include things that are not secret teaches everyone to stop reading the list. | Claude |
+| 2026-11-24 | **The local `.env.dev` port moved from 8088 to 8083**, matching the server's host port (§5.3, §7.3) | 8088 is **eloms' port** on the shared server. Nothing broke — no server env file reads `.env.dev` — but every comparison between a local run and the deployed one had to be mentally corrected, and a URL that looks like a neighbour's service is a trap left lying around for a session with no memory of this one. Aligning them costs nothing and makes `:8083` mean the same thing everywhere. The §7.3 warning about it is now written as resolved rather than live, because a stale warning is read as a current one. | Claude |
 
 ---
 
@@ -1320,3 +1579,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.4 | Branch renamed to `dev/api/resibo`. Added §6.1.1 (gainsoclock reference and the layout conflict, as a blocker) and §6.1.2 (adopted conventions). Added §7.2 verified infrastructure: DB connection working, SSH not, repository confirmed public. Rewrote §8 with the handover file location and added §8.1 outstanding security risks. Added `.gitignore`. | Claude |
 | 2026-11-24 | 0.5 | Reconciled the document with the committed scaffold (`2b6dcd6`). **§6.1 rewritten**: it described a `modules/` tree that does not exist, and now states that the code is layer-first (§6.1.1 option A) with the modular monolith kept as the documented alternative; §6.1.1 stays open as a confirmation item. Added §5.1 recording the scaffold, its dependencies, the `4.2.0.RELEASE` / "packaging: yaml" traps, the local toolchain, and the verified build and endpoints. §5's decision column filled in where code decided it and marked open where nothing has (no JPA, no driver, no Flyway, no auth, no frontend). §6.1.2 answers the `ResponseDto` and Boot/Java questions and lists which conventions actually exist. §10 and §12 #8 record the UTC `responseTime` defect; §12 #9 records the structure confirmation; §11 marks phase 1 partially delivered. Six decisions appended to §13, including the structural supersession. | Claude |
 | 2026-11-24 | 0.6 | Recorded the deployment (`c6e826d`). **§7 filled in**: production exists, serves health endpoints only, and the environments table now distinguishes a live production from an unbuilt prelive. Added **§7.3 "Deployment, as it actually works"** — the on-server layout, the deploy command, the rollback mechanism, the nginx vhost directives, the tunnel ingress with the append-don't-overwrite warning, the server port allocation, and the verified public checks. Added **§5.2** for the container runtime (multi-stage build on the committed `mvnw`, JRE-only non-root runtime, loopback-only publishing, capped logs) and two rows to §5's decision table. §7.2 updated: server access, Docker, nginx and the tunnel now verified; the server's JDK is no longer a question. §8 records the Cloudflare token by scope and the server env file by location, and settles how production values are held. §11 marks phase 8 substantially delivered for the API and lists what it does **not** include — backups, prelive, CI, and an application. §12 gains #10 (`className`/`methodName` now leak publicly — the §6.1.2 deadline has passed), #11 (prelive?) and #12 (edge authentication?), and #8 notes the UTC defect is now wrong in public. Corrected two stale §5.1/§6.1.2 claims: `application.yaml` holds five keys including `spring.config.import`, and `.env.example` plus `scripts/deploy.sh` now exist. Eight decisions appended to §13. | Claude |
+| 2026-11-24 | 0.7 | Recorded the database integration (`9b57c2b`, docs note `bfafb3a`). Added **§5.3 "The database connection"** — the three new dependencies and why the driver is `runtime` scope, the datasource block key by key, **`ddl-auto: none` with its audit-trail reasoning and a hard rule against ever relaxing it**, `open-in-view: false`, the auto-detected `MariaDBDialect`, the five environment keys (matching gainsoclock's names) and where their values live, the local port move from 8088 to 8083, the **least-privilege `resibo` account** with its probed isolation, the **CI MariaDB service container** and why its credentials are not GitHub Secrets, and what was verified. §5's decision table updated: persistence is JPA **in use**, migrations are now the gap that matters, Testcontainers moved from academic to needed. §5.1 gains the three dependencies and a corrected description of `application.yaml` and the env files — `.env.dev` now holds a real credential. §5.2's `extra_hosts` note is no longer hypothetical. §7's environments table gains a **CI** column and states what each environment's database actually is; §7.2 records the new account and the 10 production connections as `resibo`; §7.3 records the env file's new contents and **rewrites the 8088 trap as resolved**. §8's inventory now distinguishes the retired superuser from the application account and adds the local and CI env files; **§8.1 risk 2 is marked RESOLVED** with what was done and what remains, risk 3 is narrowed to the administrative credentials, and a new risk 5 records that local tests reach the shared instance. §10's backup row and §11's phase notes corrected. §12 gains #13 (local tests hit the shared production database), #14 (narrow the account's `%` host), #15 (nothing owns the schema) and #16 (the undocumented CI `deploy` job). Eight decisions appended to §13. **Throughout: "connected to the database" is stated as plumbing, never as persistence — there are still no entities, no repositories and no tables.** | Claude |

@@ -91,6 +91,44 @@ Conventions that do hold, and that new code must follow (plan §6.1.2):
 - Services are an interface plus an `XxxServiceImpl`, never a bare class.
 - Lombok `@Data` / `@NoArgsConstructor` / `@AllArgsConstructor` on DTOs.
 
+## Database
+
+The application connects to MariaDB (plan §5.3) through Spring Data JPA, as a
+**dedicated least-privilege account scoped to the `resibo` schema** — never the
+instance superuser, which is reserved for migrations and backups run by a
+person. **There are no entities, no repositories, no tables and no migrations.**
+Connected is not the same as persistent; do not describe or report it as
+persistence.
+
+> ⚠️ **`spring.jpa.hibernate.ddl-auto` is `none` and must never be changed.**
+> Not to `update`, not to `create`, not to `create-drop`, not "just locally",
+> not to make a test pass. The schema is owned outside the application, and if
+> Resibo issues BIR-registered receipts (plan §2.3), an ORM silently altering a
+> sales table is exactly the class of change that destroys an audit trail.
+> `update` is the dangerous one because it looks helpful. If a schema change is
+> needed, it is written as reviewable SQL and run deliberately — see plan §12
+> #15, which is the open question about which tool owns that.
+
+Two more settings that are decisions, not defaults, and should not be
+"tidied up": `spring.datasource.url` / `username` / `password` have **no
+defaults**, so a missing configuration fails startup loudly instead of
+connecting somewhere unintended — do not add fallbacks to make something start.
+And `spring.jpa.open-in-view` is `false`; leave it off.
+
+Where the values come from: `DATASOURCE_URL`, `DATABASE_USERNAME`,
+`DATABASE_PASSWORD`, plus `SERVER_PORT` and `DB_POOL_MAX` — names matching
+gainsoclock's `.env`. `.env.example` carries names only; `.env.dev` is
+git-ignored and now holds a **real password**; the server reads
+`/opt/resibo/resibo.env`.
+
+**Before running tests, know what the datasource points at.** One of the two
+tests starts the Spring context, so `mvnw verify` needs a database — and the
+`.env.dev` in this working copy points at the **shared server instance**, the
+same one production uses. CI is isolated by a throwaway MariaDB service
+container; a local run is not (plan §12 #13, §8.1 risk 5). Nothing writes today
+because there are no entities. Do not be the session that changes that by
+accident.
+
 ## Secrets
 
 **No credential value goes into this repository, its history, its documentation,
@@ -105,10 +143,11 @@ committed `.env.example` lists the names with empty values.
 ## Deployment
 
 The skeleton is deployed and publicly reachable. **It serves
-`/api/health/check` and `/actuator/health`, connects to no database, and
+`/api/health/check` and `/actuator/health`, connects to an empty database, and
 implements no part of a POS** — never describe it as more than that, to the
-owner or in a note. Plan §7.3 is the full procedure and §5.2 covers the image;
-this is the short version, so a session does not improvise one.
+owner or in a note. Plan §7.3 is the full procedure, §5.2 covers the image and
+§5.3 the database connection; this is the short version, so a session does not
+improvise one.
 
 | | |
 |---|---|
@@ -116,9 +155,13 @@ this is the short version, so a session does not improvise one.
 | Runtime | Docker container `resibo-api` on the shared Ubuntu server, published on `127.0.0.1:8083` **only** — never on the LAN |
 | In front of it | the host's nginx vhost, matched by `server_name` → the existing `personal-projects` Cloudflare tunnel |
 | Checkout on the server | `/opt/resibo/app`, on `dev/api/resibo` |
-| Env file | `/opt/resibo/resibo.env`, mode `0600`, outside the checkout and not in git |
+| Env file | `/opt/resibo/resibo.env`, mode `0600`, outside the checkout and not in git — holds `APP_ENV=prod` **and the datasource credentials**; the application will not start without it |
 
-**To deploy** — manual, on the server. There is no CI pipeline, by choice:
+**To deploy** — manual, on the server. `.github/workflows/ci.yml` exists and its
+`build` job is the test gate (it runs `mvnw verify` against a throwaway MariaDB
+service container); it also declares a `deploy` job on a self-hosted runner,
+which is **not documented in plan §7.3 and not the path to follow** until plan
+§12 #16 is answered. The manual procedure is:
 
 ```sh
 cd /opt/resibo/app
@@ -144,9 +187,10 @@ RESIBO_TAG=current docker compose up -d --no-build
 
 **Host ports on that server:** 8081 gainsoclock, 8082 gainsoclock prelive,
 **8083 resibo**, 8088 eloms — all loopback-bound. The container always listens
-on **8080 internally**, whatever the host port is. The local `.env.dev` happens
-to set `SERVER_PORT=8088`, which is eloms' port on the server: harmless
-locally, but never copy that value into a server env file.
+on **8080 internally**, whatever the host port is. The local `.env.dev` sets
+`SERVER_PORT=8083` to match, so a local URL and a deployed one mean the same
+thing; it used to set 8088, which is **eloms'** port, and that value should
+never appear in a Resibo env file.
 
 > ⚠️ **Cloudflare tunnel configuration: append, never overwrite.** The tunnel
 > configuration endpoint takes the **entire** ingress list and replaces it — it
@@ -167,22 +211,31 @@ repository.
 
 A skeleton exists, is verified, and is **deployed** (see Deployment above):
 Spring Boot 4.2.0 on Java 17, Maven, the `ResponseDto` conventions,
-`GET /api/health/check`, `/actuator/health`, and two passing tests. There is
-**no database connection** — the pom has neither JPA nor a JDBC driver — and no
-schema, no migrations, no authentication, and no frontend. Plan §5.1 records
-exactly what was generated and what was verified; §5.2 and §7.3 record how it
-builds into a container and how it reaches the internet.
+`GET /api/health/check`, `/actuator/health`, and two passing tests. Since
+2026-11-24 it also **connects to MariaDB** — JPA starter, MariaDB driver at
+`runtime` scope, Hikari pool, a least-privilege `resibo` account, and
+`ddl-auto: none` (see Database above). Verified: build green, `/actuator/health`
+reports `db: UP`, **zero DDL issued and zero tables in the schema**, and
+production runs its 10 pool connections as `resibo`, not as the superuser.
 
-Being deployed unblocks nothing about the product. Every `[BLOCKER]` is as open
-as it was before.
+There is still **no schema, no entity, no repository, no migration, no
+authentication and no frontend.** Plan §5.1 records what was generated, §5.3 the
+database connection and what was proven about it, §5.2 and §7.3 how it builds
+into a container and how it reaches the internet.
+
+Being deployed and being connected both unblock nothing about the product.
+Every `[BLOCKER]` is as open as it was before, and "it connects to the database"
+must never be relayed as "it has persistence".
 
 **No JDK is on `PATH` and `JAVA_HOME` is unset. Maven is not installed.** Set
-`JAVA_HOME` in every shell before building, and use the committed wrapper:
+`JAVA_HOME` in every shell before building, and use the committed wrapper —
+**and note that both commands now need a reachable database**, because the
+datasource has no defaults and one test starts the Spring context:
 
 ```powershell
 $env:JAVA_HOME = "$env:USERPROFILE\.jdks\ms-17.0.20"   # Microsoft OpenJDK 17.0.20
-.\mvnw.cmd -B clean verify     # compile + tests
-.\mvnw.cmd spring-boot:run     # run on :8080, override with SERVER_PORT
+.\mvnw.cmd -B clean verify     # compile + tests; needs DATASOURCE_URL et al.
+.\mvnw.cmd spring-boot:run     # run on :8083 per .env.dev, or SERVER_PORT
 ```
 
 `docker compose up --build` is the alternative that needs no `JAVA_HOME` at all
@@ -191,7 +244,11 @@ the same image that runs in production.
 
 Everything past the skeleton is still blocked. Generating it was the owner
 lifting the scaffolding hold for one step, not for the project — do not start on
-the schema, auth, or checkout without answers to §1, §2 and §6.1.1.
+the schema, auth, or checkout without answers to §1, §2 and §6.1.1. The database
+connection was a second such step and deliberately as narrow: a connection pool
+and a forbidden `ddl-auto` are identical whatever the §2 answers turn out to be,
+which is exactly why it could be built now. **An entity is not**, so do not
+write one.
 
 Two known gaps, so they are not rediscovered as surprises. Both are now visible
 on the public internet, which raises the stakes without changing the answer:
