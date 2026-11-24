@@ -16,9 +16,24 @@ npm install
 npm run dev          # http://localhost:5173
 ```
 
-`npm run dev` proxies `/api` to `http://localhost:8083`, so start the backend
-too (`./mvnw spring-boot:run` from the repository root) and the browser only
-ever talks to one origin — no CORS involved locally.
+**That is all you need.** By default the client talks to the **deployed** API
+at `https://resibo-api.polbinsenthabyer.uk/api`, so there is no backend to
+start, no database to reach, and no `JAVA_HOME` to set.
+
+To run against a **local** backend instead, point it at the relative path and
+let the dev proxy forward to `:8083`:
+
+```sh
+VITE_API_BASE_URL=/api npm run dev      # PowerShell: $env:VITE_API_BASE_URL="/api"; npm run dev
+```
+
+Then start the backend too (`./mvnw spring-boot:run` from the repository root).
+The browser sees a single origin that way, so CORS never applies.
+
+> ⚠️ **The default points development at production.** Harmless today — the
+> only call the app makes is a GET health check — and the status page says
+> which API it is using. It stops being harmless the moment a screen can
+> write, so revisit this before the first product form.
 
 | Script | What it does |
 |---|---|
@@ -126,12 +141,17 @@ public.
 
 ## Configuration
 
-No env file is needed to develop. `src/config/env.ts` defaults the API to the
-relative path `/api`, which the dev proxy handles and which is also correct for
-a production build served from the same origin as the API.
+No env file is needed. `src/config/env.ts` defaults the API to the deployed
+host; `VITE_API_BASE_URL` overrides it. See `.env.example`.
 
-Set `VITE_API_BASE_URL` at build time when the two are on different origins.
-See `.env.example`.
+| `VITE_API_BASE_URL` | Talks to |
+|---|---|
+| unset | the deployed API — `https://resibo-api.polbinsenthabyer.uk/api` |
+| `/api` | a local backend on `:8083`, through the dev proxy. Also correct for a production build served from the same origin as the API |
+| an absolute URL | whatever you name |
+
+`env.isUsingDeployedApi` is true in the first case, and the status page renders
+a notice from it. Keep that notice on any screen that can write.
 
 ⚠️ **Every `VITE_`-prefixed value is compiled into the bundle the browser
 downloads.** Nothing secret may go in one — see `resibo-plan.md` §8.

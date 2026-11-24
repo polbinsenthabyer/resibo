@@ -38,6 +38,18 @@ export function HealthPage() {
       <p className={styles.detail}>
         Calling <code>{env.apiBaseUrl}/health/check</code>
       </p>
+
+      {/*
+        Which backend is being used is not a detail — the default is the
+        deployed one, so a developer could otherwise be writing to production
+        without noticing. Keep this visible on any screen that can write.
+      */}
+      {env.isUsingDeployedApi && (
+        <StatusMessage tone="pending">
+          Pointed at the <strong>deployed</strong> API, not a local backend. Set{' '}
+          <code>VITE_API_BASE_URL=/api</code> to use your own on :8083.
+        </StatusMessage>
+      )}
     </section>
   )
 }

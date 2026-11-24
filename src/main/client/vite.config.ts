@@ -40,9 +40,14 @@ export default defineConfig({
 
   server: {
     port: 5173,
-    // Dev requests to /api are proxied to the backend, so the browser only
-    // ever talks to one origin and CORS never enters the picture locally.
-    // 8083 is Resibo's port in every environment — see resibo-plan.md §7.3.
+    // This proxy is opt-in, not the default path. src/config/env.ts points at
+    // the deployed API unless VITE_API_BASE_URL says otherwise, so the proxy
+    // only carries traffic when you set:
+    //
+    //   VITE_API_BASE_URL=/api
+    //
+    // Then the browser sees a single origin and CORS never enters the picture
+    // locally. 8083 is Resibo's port in every environment — plan §7.3.
     proxy: {
       '/api': {
         target: 'http://localhost:8083',
