@@ -15,7 +15,7 @@ catalog.
 
 **Read that narrowly.** What exists is a way to log in and a list of products.
 There is no checkout, no sale, no receipt, no payment, no shift, no stock
-movement; the client currently shows API health only — so there is no POS. **Every `[BLOCKER]` item below is
+movement; the client has health, login, and signup pages but no POS workflow. **Every `[BLOCKER]` item below is
 still unanswered, and nothing that depends on one should be written until it
 is.** The two roles are a working minimum, not the answer to §1.3. The
 `product` table is a name, a price and a stock count, not the §4 domain model.
@@ -1082,8 +1082,8 @@ so the filters cannot be used to inject SQL.
 
 A React application scaffolded with Vite, now living at **`client/`** on the
 single **`dev/resibo`** branch. It renders, builds, type-checks and lints, is
-deployed as static files (§7.4), and calls the API's health endpoint. **It is
-not a POS screen and not a login screen.**
+deployed as static files (§7.4), and has a health page plus public login and
+signup forms wired to `AuthController`. **It is not a POS screen.**
 
 The health page includes a locally bundled SpongeBob dancing GIF as a visible
 client pipeline test (2026-11-24). It changes no API behavior. Remove the
@@ -1099,7 +1099,7 @@ test image when this page becomes a product screen.
 | Styling | plain **SCSS** (`sass` 1.108) — tokens as CSS custom properties, one CSS Module per component |
 | Routing | **React Router 7.18**, one route table at `src/app/router.tsx` |
 | Linting / formatting | **oxlint** 1.95 — create-vite's default now, not ESLint — and **Prettier** 3.10 |
-| Dev server | `localhost:5173`. **Calls the deployed API by default**, so `npm run dev` needs no backend, no database and no `JAVA_HOME`. Set `VITE_API_BASE_URL=/api` to use a local backend instead, routed through the dev proxy to `localhost:8083`. |
+| Dev server | `localhost:5173`. Defaults to `/api`, proxied to a local backend on `localhost:8083`. `VITE_API_BASE_URL` can name another target explicitly. The production bundle defaults to the deployed API. **The local backend currently uses the shared live database, so the proxy alone does not isolate account writes.** |
 | Added to the template | `react-router-dom`; dev-only `sass` and `prettier`. Nothing else. |
 
 #### Where it lives, and why that was a decision
@@ -1156,30 +1156,29 @@ detail on a public response (§12 #10).
 
 #### Which API it talks to
 
-**The default is the deployed API**, `https://resibo-api.polbinsenthabyer.uk/api`,
-set in `src/config/env.ts`. The owner asked for it directly, and it makes the
-client runnable on its own: `npm install && npm run dev`, with no backend
-process, no database and no JDK. The dev proxy still exists and is used by
-setting `VITE_API_BASE_URL=/api`, which makes the browser see one origin.
+The **production build** defaults to
+`https://resibo-api.polbinsenthabyer.uk/api`. **Local Vite development** now
+defaults to `/api`, proxied to `localhost:8083`. `VITE_API_BASE_URL` overrides
+either default. This supersedes the earlier development default in §13: the
+owner originally chose a live API default while the client could only read
+health, but signup can create an account.
 
-⚠️ **This points development at production**, which is a trade rather than a
-convenience. It is harmless today because the only call the app makes is a
-`GET` health check. It stops being harmless at the first screen that writes,
-when a product form on a laptop would edit the live catalog. Two mitigations
-are in place and neither is sufficient alone: `env.isUsingDeployedApi` is
-exported and the status page renders a visible notice from it, and the page
-always prints the base URL it is calling. **Revisit the default before the
-first mutating screen** — it is one constant.
+⚠️ **The proxy is not database isolation.** `server/.env.dev` currently points
+at the same live schema as production (§12 #13), so a local backend can still
+create real accounts. The signup page warns about this in development. Both
+auth pages print their effective API target, and no account is created just
+to verify the frontend. A truly isolated local signup needs a separate
+database, which remains backend work.
 
-CORS is not an obstacle: backend `1ad0803` made the allowed origins
-configurable through `CORS_ALLOWED_ORIGINS`, defaulting to `*` and naming
-`http://localhost:5173` explicitly. Checked against the live host rather than
-assumed.
+The deployed API's CORS allow-list includes the live client and both Vite
+localhost origins (§5.4). An explicit live API override in development can
+therefore work, but it must be intentional.
 
 #### Deliberately not built
 
-- **No login screen**, though `features/auth` types and calls both endpoints.
-  What each role must *not* be able to do is §1.3, unanswered.
+- **No protected product screen or role-based destination.** Login saves a
+  bearer token; signup confirms account creation without signing in. The
+  permission decisions for ADMIN and EMPLOYEE remain open in §1.3.
 - **No money or date formatting.** Currency, date format and timezone are blank
   in §10, and `responseTime` serialises in UTC. A formatter would have had to
   guess, and a POS prints those values on receipts — so `features/products`
@@ -1188,19 +1187,19 @@ assumed.
 - **No tests and no test runner.** §5 proposes Vitest; nothing is installed.
 - **No state or data-fetching library.** A small `useAsync` hook covers one
   health call.
-- **No deployment path of any kind** — no CI build step, no nginx vhost, no
-  hostname, no container. See §12 #22.
+- **No isolated local auth database.** The local backend still reaches the
+  shared live schema (§12 #13); the frontend cannot fix that boundary.
 
 #### Verified
 
 | What | Result |
 |---|---|
-| `npm run build` (`tsc -b && vite build`) | **passes** — 47 modules, 317 kB JS, 3.5 kB CSS |
+| `npm run build` (`tsc -b && vite build`) with the auth pages | **passes** — 51 modules, 323.23 kB JS, 5.01 kB CSS before documentation finalization |
 | `npm run lint` (oxlint) | **clean**, no warnings |
 | `npx prettier --check` | clean |
 | `./mvnw -B clean compile` after the client landed | **BUILD SUCCESS**, 32 sources, `src/main/client` untouched |
-| The deployed API, which is now the default target | **verified by `curl`** — `GET /api/health/check` returns **200**, and the CORS preflight carrying `Origin: http://localhost:5173` is answered with `access-control-allow-origin: http://localhost:5173`. The default target answers, and it permits the dev server. |
-| The client in a browser | **still not verified.** `npm run dev` has not been run, so the page itself has never been loaded. The build, the types, the lint and the endpoint are each evidenced; the two halves have never been put together. |
+| The deployed API | Previously verified by `curl`: `GET /api/health/check` returns 200 and the local Vite origin is allowed by CORS. This is the production build target, not the local development default. |
+| Login and signup in a browser | **Not yet verified.** Build, types, and lint pass; a real account has not been created to exercise signup. CI and public route checks are still pending this change. |
 
 ---
 
@@ -2295,6 +2294,7 @@ trivia the next session cannot reuse.
 | 2026-11-24 | **CORS is restricted to named origins, and the *default* is the real list rather than `*`** (§5.4) | Owner's instruction to limit the API to the deployed client and local development. The default matters as much as the value: a wildcard default is the kind of silently-wrong setting that reaches production because nothing ever complains about it, so an environment that forgets `CORS_ALLOWED_ORIGINS` now fails closed — the same reasoning that keeps the datasource properties defaultless. **`localhost:5173` is deliberately in the production list**, because the client defaults to calling the deployed API, so `npm run dev` with no local backend is a cross-origin call from localhost to that host; removing it would break the normal development loop. The override that had been sitting in `/opt/resibo/resibo.env` as `CORS_ALLOWED_ORIGINS=*` was commented out so the committed, reviewable list governs rather than an unversioned file — and it is the reason the first deploy of this change had no effect, which is why it was verified against the live API rather than assumed. | Owner, defaulting and verification by Claude |
 | 2026-11-24 | Bundle a SpongeBob GIF on the client health page for a pipeline test (§5.6) | The owner asked for a visible client-only change and a push. Keeping the small GIF in `client/public/` makes the result independent of an external image host and guarantees the `client/**` workflow filter matches. It is temporary decoration on the existing health page, not a product design decision. | Owner, implemented by Codex |
 | 2026-11-24 | Give client deployment its own runner label and repository variable (§7.4) | The owner wants every frontend push to build and reach the live site. A shared `DEPLOY_ENABLED` flag would also arm the backend deploy job, which was not requested. `CLIENT_DEPLOY_ENABLED` and `resibo-client-deploy` keep the frontend path independent while the backend gate remains closed. The deploy script retains old hashed assets so an in-flight page does not break during the swap. | Owner, implemented by Codex |
+| 2026-11-24 | Add responsive login and signup pages using the existing auth client; switch the Vite development default to `/api` (§5.6) | The owner requested the two controller flows and made responsive design a standing frontend requirement. Anonymous signup has no meaningful role choice after the first account, so the form omits role; signup does not sign the caller in because the API returns no token. The earlier live development default was chosen for a read-only health page. A write-capable page makes a direct production default too easy to misuse. The local backend still uses the shared live database, so the form warns and the proxy is not presented as data isolation. Production keeps its deployed API default. | Owner, implemented by Codex |
 
 ---
 
@@ -2319,3 +2319,4 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.15 | Configured client-only automatic deployment with a dedicated runner and `CLIENT_DEPLOY_ENABLED` gate; removed premature asset deletion from `scripts/deploy-client.sh`. §7.4 records the deployment path and its pending end-to-end verification; §13 records the separation from backend deployment. | Codex |
 | 2026-11-24 | 0.16 | Recorded successful end-to-end client CI deployment (`e1f80e4`, run `45366787290`), public GIF hash match, preservation of old assets, and no backend workflow run. Closed §12 #22 for the client. | Codex |
 | 2026-11-24 | 0.17 | Recorded a second successful client-only push (`99446c1`, run `45367329760`) to verify the `client/**` trigger and repeat deployment. | Codex |
+| 2026-11-24 | 0.18 | Added responsive login and signup pages to §5.6, recorded the development API default change and its shared-database caveat, and superseded the earlier read-only client status. Verification and CI deployment of the new forms remain pending. | Codex |

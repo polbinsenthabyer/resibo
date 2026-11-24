@@ -1,5 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom'
 
+import { LoginPage } from '@/features/auth/pages/LoginPage'
+import { SignupPage } from '@/features/auth/pages/SignupPage'
 import { HealthPage } from '@/features/health/pages/HealthPage'
 import { AppLayout } from '@/layouts/AppLayout'
 import { NotFoundPage } from '@/pages/NotFoundPage'
@@ -20,6 +22,8 @@ export const router = createBrowserRouter([
     element: <AppLayout />,
     children: [
       { index: true, element: <HealthPage /> },
+      { path: paths.login, element: <LoginPage /> },
+      { path: paths.signup, element: <SignupPage /> },
       { path: '*', element: <NotFoundPage /> },
     ],
   },

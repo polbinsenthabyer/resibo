@@ -11,28 +11,24 @@ The React frontend. Lives at `client/` in the Resibo monorepo on `dev/resibo`.
 
 ```sh
 cd client
-npm install
+npm ci
 npm run dev          # http://localhost:5173
 ```
 
-**That is all you need.** By default the client talks to the **deployed** API
-at `https://resibo-api.polbinsenthabyer.uk/api`, so there is no backend to
-start, no database to reach, and no `JAVA_HOME` to set.
+Local development uses the `/api` proxy by default. Start the backend on
+`:8083` as well (`./mvnw spring-boot:run` from `server/`), then Vite forwards
+requests to it. The browser sees one origin, so CORS does not apply.
+The current `server/.env.dev` uses the shared live database, so a local signup
+can still create a live account. Check the backend datasource before using it.
 
-To run against a **local** backend instead, point it at the relative path and
-let the dev proxy forward to `:8083`:
+To use the deployed API intentionally from development, set the base URL:
 
 ```sh
-VITE_API_BASE_URL=/api npm run dev      # PowerShell: $env:VITE_API_BASE_URL="/api"; npm run dev
+VITE_API_BASE_URL=https://resibo-api.polbinsenthabyer.uk/api npm run dev
 ```
 
-Then start the backend too (`./mvnw spring-boot:run` from `server/`).
-The browser sees a single origin that way, so CORS never applies.
-
-> ⚠️ **The default points development at production.** Harmless today — the
-> only call the app makes is a GET health check — and the status page says
-> which API it is using. It stops being harmless the moment a screen can
-> write, so revisit this before the first product form.
+Production builds still use that deployed API by default. Login and signup
+pages show their effective API target; signup can create a real account.
 
 | Script | What it does |
 |---|---|
@@ -56,6 +52,15 @@ automatic client release passed in [run 45366787290](https://github.com/polbinse
 The health page currently displays a temporary SpongeBob GIF to make the
 pipeline result easy to see. It is bundled in `public/spongebob.gif`, sourced
 from the [SpongeBob SquarePants GIPHY channel](https://giphy.com/gifs/dancing-hipster-spongebob-9d1Fo0XyIYXzW).
+
+## Authentication pages
+
+`/login` and `/signup` use the existing `authApi` calls. Login stores the JWT
+returned by `AuthController` and offers local sign-out. Signup sends username,
+password, and optional name; it does not request a role or sign the user in.
+Both forms show the API target, handle server errors, and fit narrow screens.
+The signup page warns in development that `server/.env.dev` currently uses the
+shared live database, even when the browser calls the local `/api` proxy.
 
 ## Why it is separate from the backend
 
@@ -151,26 +156,27 @@ public.
 
 ## Configuration
 
-No env file is needed. `src/config/env.ts` defaults the API to the deployed
-host; `VITE_API_BASE_URL` overrides it. See `.env.example`.
+No env file is needed. `src/config/env.ts` chooses a safe default for each
+environment; `VITE_API_BASE_URL` overrides it. See `.env.example`.
 
 | `VITE_API_BASE_URL` | Talks to |
 |---|---|
-| unset | the deployed API — `https://resibo-api.polbinsenthabyer.uk/api` |
-| `/api` | a local backend on `:8083`, through the dev proxy. Also correct for a production build served from the same origin as the API |
+| unset in local development | a local backend on `:8083`, through Vite's `/api` proxy |
+| unset in a production build | the deployed API — `https://resibo-api.polbinsenthabyer.uk/api` |
+| `/api` | the local backend through the dev proxy; use in production only if a same-origin API proxy is configured |
 | an absolute URL | whatever you name |
 
-`env.isUsingDeployedApi` is true in the first case, and the status page renders
-a notice from it. Keep that notice on any screen that can write.
+Both auth pages print the effective target. The health page warns when a
+developer has explicitly pointed it at the deployed API.
 
 ⚠️ **Every `VITE_`-prefixed value is compiled into the bundle the browser
 downloads.** Nothing secret may go in one — see `resibo-plan.md` §8.
 
 ## Known gaps, deliberately
 
-- **No login screen.** The auth API is typed and wired; the screen is not
-  built, because what each role may and may not do is an open question
-  (`resibo-plan.md` §1.3).
+- **No protected product screen.** Login saves a token and signup creates an
+  account, but role-specific UI waits for the permission decisions in plan
+  §1.3.
 - **No money or date formatting helpers.** Currency, date format and timezone
   are blank in plan §10, and `responseTime` currently serialises in UTC. A
   formatter here would have had to guess, and a POS prints timestamps on

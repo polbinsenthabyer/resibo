@@ -23,6 +23,18 @@ export function AppLayout() {
           >
             Status
           </NavLink>
+          <NavLink
+            to={paths.login}
+            className={({ isActive }) => cx(isActive && styles.navLinkActive)}
+          >
+            Log in
+          </NavLink>
+          <NavLink
+            to={paths.signup}
+            className={({ isActive }) => cx(isActive && styles.navLinkActive)}
+          >
+            Sign up
+          </NavLink>
         </nav>
       </header>
 
