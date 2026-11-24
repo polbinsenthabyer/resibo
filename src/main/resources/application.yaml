@@ -9,12 +9,42 @@ spring:
   config:
     import: optional:file:.env.${APP_ENV:dev}[.properties]
 
+  # No defaults here on purpose. If the datasource values are missing the
+  # application fails to start with a clear message, which is far safer than
+  # silently falling back to some other database.
+  datasource:
+    url: ${DATASOURCE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+    driver-class-name: org.mariadb.jdbc.Driver
+    hikari:
+      pool-name: resibo-pool
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      # Fail fast rather than hanging a checkout request when the database
+      # is unreachable — the till must find out immediately, not eventually.
+      connection-timeout: 10000
+
+  jpa:
+    hibernate:
+      # none — Hibernate never creates, alters or drops anything. The schema is
+      # owned outside the application (same arrangement as gainsoclock).
+      # This is not merely a preference: if Resibo ends up issuing BIR-registered
+      # receipts, an ORM silently altering the sales tables is exactly the class
+      # of change that breaks an audit trail. Do not set this to update/create.
+      ddl-auto: none
+    # Keeps the persistence context out of the view layer. Without this,
+    # connections are held for the whole request and lazy loads happen during
+    # serialisation, which is the usual cause of mystery pool exhaustion.
+    open-in-view: false
+
 server:
   port: ${SERVER_PORT:8080}
 
 # Actuator exposes /actuator/health for infrastructure probes.
 # The application's own contract endpoint is /api/health/check (HealthController),
 # which returns the standard ResponseDto envelope.
+# With the datasource present, /actuator/health now also reflects database
+# reachability — details stay hidden from anonymous callers.
 management:
   endpoints:
     web:

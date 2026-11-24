@@ -23,6 +23,33 @@ jobs:
   build:
     name: Build and test
     runs-on: ubuntu-latest
+
+    # The real database lives on a private network that GitHub-hosted runners
+    # cannot reach, so the build gets a throwaway MariaDB of its own. Same
+    # approach as gainsoclock's workflow.
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MARIADB_DATABASE: resibo_test
+          MARIADB_ROOT_PASSWORD: test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    # Throwaway credentials for a container that exists for one job. These are
+    # not secrets and deliberately are not GitHub Secrets — nothing is gained by
+    # hiding the password to a database that is destroyed minutes later.
+    env:
+      DATASOURCE_URL: jdbc:mariadb://localhost:3306/resibo_test
+      DATABASE_USERNAME: root
+      DATABASE_PASSWORD: test
+      SERVER_PORT: '8080'
+
     steps:
       - name: Get source code
         uses: actions/checkout@v7
@@ -40,10 +67,6 @@ jobs:
       - name: Build and test
         run: bash ./mvnw -B clean verify
 
-      # When persistence is added, a MariaDB service container goes here and
-      # the datasource env vars point at it — see gainsoclock's maven.yml for
-      # the pattern. The app has no database dependency yet, so there is
-      # nothing to stand up.
 
   deploy:
     name: Deploy to server
