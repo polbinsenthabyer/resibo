@@ -48,6 +48,10 @@ fi
 # deploying account, so a compromised deploy cannot rewrite a sibling.
 install -d -o root -g root -m 755 "$WWW_ROOT"
 install -d -o "$OWNER" -g "$OWNER" -m 755 "$TARGET"
+# Where deploy-client.sh keeps the previous release for rollback. It has to be
+# writable by the deploying account, and it sits outside the vhost's root so
+# nginx never serves it.
+install -d -o "$OWNER" -g "$OWNER" -m 755 "${WWW_ROOT}/.previous"
 echo "==> $TARGET ready, owned by $OWNER"
 
 # A placeholder so the vhost has something to serve before the first deploy.
@@ -126,10 +130,24 @@ systemctl reload nginx
 echo "==> nginx reloaded"
 
 # --- prove it serves ---------------------------------------------------------
-if curl -fsS --max-time 5 -o /dev/null -H "Host: ${SERVER_NAME}" http://127.0.0.1/; then
+# `systemctl reload` returns before the new workers are necessarily serving,
+# so a single immediate request can still be answered by an old worker that
+# has never heard of this vhost — which shows up as the default server's
+# response (a 401 from one of the APIs) rather than a 404. Retry briefly
+# instead of reporting a failure that is really a race.
+served=false
+for _ in 1 2 3 4 5; do
+  if curl -fsS --max-time 5 -o /dev/null -H "Host: ${SERVER_NAME}" http://127.0.0.1/; then
+    served=true
+    break
+  fi
+  sleep 1
+done
+
+if [[ "$served" == true ]]; then
   echo "==> Serving ${SERVER_NAME} from $TARGET"
 else
-  echo "WARNING: nginx did not answer for that Host header" >&2
+  echo "WARNING: nginx did not answer for that Host header after 5 attempts" >&2
   exit 1
 fi
 

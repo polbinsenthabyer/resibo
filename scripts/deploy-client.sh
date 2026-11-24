@@ -43,11 +43,19 @@ if [[ ! -d "$target" ]]; then
 fi
 
 # --- keep the previous release, so a rollback needs no rebuild -------------
-previous="${target}.previous"
-if [[ -d "$target" ]] && [[ -n "$(ls -A "$target" 2>/dev/null)" ]]; then
+# Stored under /var/www/resibo/.previous rather than beside the live
+# directory: the parent is deliberately root-owned so a compromised deploy
+# cannot rewrite a sibling, and .previous is the one place in it the deploy
+# account may write. It sits outside the vhost's root, so nginx never serves
+# it.
+previous="/var/www/resibo/.previous/${environment}"
+if [[ -d "$(dirname "$previous")" ]] && [[ -n "$(ls -A "$target" 2>/dev/null)" ]]; then
   rm -rf "$previous"
   cp -a "$target" "$previous"
   echo "==> Kept the current release as $previous"
+elif [[ ! -d "$(dirname "$previous")" ]]; then
+  echo "==> No $(dirname "$previous") directory; skipping the rollback copy."
+  echo "    Re-run scripts/setup-client-server.sh to create it."
 fi
 
 # --- place the new files ----------------------------------------------------
