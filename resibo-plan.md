@@ -66,10 +66,10 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.31 — admin user management API at `/api/admin/users/**`; scope still unfilled |
+| Document version | 0.33 — admin Users contract alignment; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-25 |
-| Last updated by | Claude (admin user management API) |
+| Last updated by | Codex (admin Users contract alignment) |
 | Plan status | **AWAITING OWNER INPUT** — the API is deployed and authenticated (§5.4, §7.3), and the React client is now deployed too, at `https://resibo.polbinsenthabyer.uk` (§5.6, §7.4). There is still no checkout, no sale and no receipt, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
 | Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` on `dev/resibo`. A second clone at `%USERPROFILE%\sprintify_solutions\personal\app\resibo` is a duplicate; do not edit it until its fate is decided. |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
@@ -1175,6 +1175,19 @@ before save, shows backend feedback through the shared popup, and offers
 session-ended or access-denied guidance for 401/403 reads. Prices are shown
 with two decimal places but without an assumed currency or client totals.
 No sales, receipts, or permission beyond the existing ADMIN route are invented.
+
+**Admin Users (2026-11-25).** The desktop sidebar and mobile drawer also link
+to `/admin/users`. That screen lists, searches, filters by role/status, and
+pages through accounts using the new ADMIN-only user API. Add/Edit use a modal
+form; activation and deactivation have separate controls, with confirmation
+before deactivation and no hard delete. New accounts default to EMPLOYEE, and
+an edit leaves password and role unchanged unless explicitly entered. The
+backend enforces self/last-active-admin safeguards. Current list/get responses
+expose only a numeric `userRoleId`, whose values must not be guessed: the UI
+marks each role unavailable and keeps the edit form on "Keep current role"
+until the backend adds a stable role-name field.
+The backend endpoint is committed locally but not yet deployed, so this UI's
+API behavior has not been verified against the deployed service.
 
 | Field | Value |
 |---|---|
@@ -2426,6 +2439,8 @@ trivia the next session cannot reuse.
 | 2026-11-25 | Use a slide-in drawer for mobile admin navigation (§5.6) | The owner wants a conventional mobile side menu. Keep the far-left sidebar fully visible on desktop, where the earlier collapse request was withdrawn. Put the burger at the right of the Resibo header on mobile and remove the extra Admin strip. A left-sliding drawer and backdrop reveal the same links, with icon-only theme and Sign out controls together at the bottom. Close on Escape, backdrop, close button, or route choice; synchronize theme controls across viewport changes. No route or backend behavior changes. | Owner, implemented by Codex |
 | 2026-11-25 | Flatten the mobile product catalog (§5.6) | The owner highlighted the phone product screen as too boxed in. The outer catalog panel and product cards each added border and padding, narrowing the usable width. Remove the outer mobile panel treatment, consolidate the count with the view toggle, and reduce redundant heading text while preserving the full desktop panel and all product data and actions. | Owner, implemented by Codex |
 | 2026-11-25 | **Admin user management added at `/api/admin/users/**`** — create/update, list, get, activate, deactivate for both ADMIN and EMPLOYEE accounts, no hard delete (§5.1) | Owner's request: an admin-only surface to manage staff accounts, matching how an authenticated admin could already name a role during signup, but as a real management surface rather than buried in the public signup contract. Activation is a dedicated pair of endpoints rather than folded into `/set`, per the owner's explicit preference, so a profile edit can never silently flip it. No hard delete, because `user.is_active` already exists for exactly this and a user row is the kind of thing a future sales/audit record will reference. Two new safeguards — an admin cannot deactivate or demote their own account, and cannot deactivate or demote the last remaining active admin — exist because the first-signup bootstrap bug found during the 2026-11-25 scan already showed this kind of lockout is reachable; this feature must not add a second way to cause it. Implemented test-first: 29 Mockito unit tests in `UserServiceImplTest`, no Spring context and no database, mirroring `ProductServiceImplTest`'s style. | Owner, safeguards by Claude |
+| 2026-11-25 | Add an admin Users screen on the new API (§5.6) | The owner asked for a new sidebar section to handle accounts. Reuse the new ADMIN-only list/get/set/activate/deactivate routes rather than sending staff through public signup. Keep creation/editing in a popup like Products, offer role/status filters and pagination, and confirm deactivation. Do not offer hard delete or client-side substitutes for the backend lockout safeguards. The response currently carries only `userRoleId` with environment-dependent values, so leave role unchanged on edit unless selected and request a stable role-name response field before claiming role display. The local client still targets the deployed API, where these new routes are not yet deployed; avoid live writes and defer end-to-end verification. | Owner, implemented by Codex |
+| 2026-11-25 | Match the admin Users client to the reviewed server response (§5.6) | The server's `db3f3c9` validation and transaction fixes and `19be949` contract documentation preserve the endpoint and envelope shapes. The client already sends valid role filters, 100-character names, and omitted unchanged password/role fields. Remove the speculative `ManagedUser.role` field because the server actually returns only `userRoleId`. Show "Role unavailable" rather than silently leaving an empty role slot, and keep the edit selector explicitly unchanged until the admin chooses a role. Do not infer role from environment-dependent numeric IDs. | Owner, implemented by Codex |
 
 ---
 
@@ -2464,3 +2479,5 @@ trivia the next session cannot reuse.
 | 2026-11-25 | 0.29 | Added a persistent joined row/card toggle and a modal Add/Edit editor in §5.6 and §13; both views use the same product page and controls. Verified locally, then pushed at the owner's request. | Codex |
 | 2026-11-25 | 0.30 | Added a left-sliding mobile admin drawer from the Resibo header, put theme and Sign out icons together at its bottom, and flattened the phone catalog layout; retained the desktop sidebar. Recorded rationale in §13; verified and committed for push. | Codex |
 | 2026-11-25 | 0.31 | Added the admin user management API — `POST/GET /api/admin/users/{set,list,get/{id}}` plus dedicated `POST /activate/{id}` and `POST /deactivate/{id}` — to §5.1's endpoint table (eight endpoints → thirteen) and §13. Backend only; no frontend screen. | Claude |
+| 2026-11-25 | 0.32 | Added the `/admin/users` sidebar/workspace plan in §5.6 and §13, including create/edit, list/filter/page, activation, and the role-name response gap. Frontend lint/build/format/diff checks, local route HTTP, and independent review passed; commit waits for the backend's whole-branch review. Backend deployment is separate. | Codex |
+| 2026-11-25 | 0.33 | Aligned the Users response type and role display with the server's unchanged wire contract after its validation fixes; documented the remaining role-name API gap. Client lint/build/format/diff and local route checks passed; independent reviewer accepted. Local commit recorded in the vault Changelog; push held. | Codex |

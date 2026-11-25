@@ -3,6 +3,7 @@ import { createBrowserRouter } from 'react-router-dom'
 import { AdminLayout } from '@/features/admin/AdminLayout'
 import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage'
 import { AdminProductsPage } from '@/features/admin/pages/AdminProductsPage'
+import { AdminUsersPage } from '@/features/admin/pages/AdminUsersPage'
 import { HomeRedirect } from '@/features/auth/components/HomeRedirect'
 import { RequireRole } from '@/features/auth/components/RequireRole'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <AdminDashboardPage /> },
           { path: 'products', element: <AdminProductsPage /> },
+          { path: 'users', element: <AdminUsersPage /> },
         ],
       },
       {

@@ -7,6 +7,8 @@ import { productApi } from '@/api/products/api'
 import type { ProductUpsertRequest } from '@/api/products/types'
 import { paths } from '@/app/paths'
 import { IconButton } from '@/components/ui/IconButton/IconButton'
+
+import { useAdminModal } from '../hooks/useAdminModal'
 import styles from '../pages/AdminPage.module.scss'
 
 interface ProductEditorProps {
@@ -36,62 +38,11 @@ export function ProductEditor({ productId, onClose, onSaved }: ProductEditorProp
   const [loadError, setLoadError] = useState<Error | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    dialogRef.current?.focus()
-    return () => {
-      document.body.style.overflow = previousOverflow
-    }
-  }, [])
+  useAdminModal(dialogRef, onClose, isSaving)
 
   useEffect(() => {
     if (loadState === 'ready') nameInputRef.current?.focus()
   }, [loadState])
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const dialog = dialogRef.current
-      if (!dialog) return
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        if (!isSaving) onClose()
-        return
-      }
-      if (event.key !== 'Tab') return
-
-      const controls = Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled])',
-        ),
-      )
-      const first = controls[0]
-      const last = controls.at(-1)
-      if (!first || !last) {
-        event.preventDefault()
-        dialog.focus()
-      } else if (
-        event.shiftKey &&
-        (document.activeElement === first ||
-          document.activeElement === dialog ||
-          !dialog.contains(document.activeElement))
-      ) {
-        event.preventDefault()
-        last.focus()
-      } else if (
-        !event.shiftKey &&
-        (document.activeElement === last ||
-          document.activeElement === dialog ||
-          !dialog.contains(document.activeElement))
-      ) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isSaving, onClose])
 
   useEffect(() => {
     if (productId === null) return

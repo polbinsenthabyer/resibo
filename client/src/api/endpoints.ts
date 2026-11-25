@@ -28,4 +28,12 @@ export const endpoints = {
     get: (productId: number) => `/admin/products/get/${productId}`,
     delete: (productId: number) => `/admin/products/delete/${productId}`,
   },
+
+  adminUsers: {
+    set: '/admin/users/set',
+    list: '/admin/users/list',
+    get: (userId: number) => `/admin/users/get/${userId}`,
+    activate: (userId: number) => `/admin/users/activate/${userId}`,
+    deactivate: (userId: number) => `/admin/users/deactivate/${userId}`,
+  },
 } as const

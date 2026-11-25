@@ -13,6 +13,9 @@ import {
   RefreshCw,
   Search,
   Trash2,
+  UserCheck,
+  UserRound,
+  UserX,
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -35,6 +38,9 @@ export type AdminIconName =
   | 'rowView'
   | 'cardView'
   | 'menu'
+  | 'users'
+  | 'activate'
+  | 'deactivate'
 
 interface AdminIconProps {
   name: AdminIconName
@@ -57,6 +63,9 @@ const icons: Record<AdminIconName, LucideIcon> = {
   rowView: List,
   cardView: LayoutGrid,
   menu: Menu,
+  users: UserRound,
+  activate: UserCheck,
+  deactivate: UserX,
 }
 
 /** Shared Lucide symbols. Control labels remain separate and accessible. */

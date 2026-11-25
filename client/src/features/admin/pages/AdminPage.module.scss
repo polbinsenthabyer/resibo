@@ -103,6 +103,19 @@
   gap: var(--space-4);
 }
 
+.userFilterForm {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(8rem, 1fr)) auto;
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.filterActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .searchLabel,
 .field > span:first-child {
   font-weight: 600;
@@ -172,7 +185,8 @@
 
 .searchControls input,
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   width: 100%;
   min-height: 2.75rem;
   padding: var(--space-2) var(--space-3);
@@ -256,6 +270,21 @@
   }
 }
 
+.userMeta {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.activeStatus {
+  color: var(--color-success);
+}
+
+.inactiveStatus {
+  color: var(--color-danger);
+}
+
 .outOfStock {
   color: var(--color-danger);
 }
@@ -267,6 +296,14 @@
 }
 
 @media (max-width: $breakpoint-md) {
+  .userFilterForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .userSearch {
+    grid-column: 1 / -1;
+  }
+
   .productRow {
     grid-template-columns: minmax(0, 1fr) auto;
   }
@@ -277,6 +314,11 @@
 }
 
 @media (max-width: $breakpoint-sm) {
+  .filterActions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
   .page {
     gap: var(--space-4);
   }

@@ -108,6 +108,14 @@ Both menus use labeled section icons. Admin action
 buttons and the light/dark toggle show icons instead of text; accessible
 names and hover titles describe their actions.
 
+`/admin/users` uses the admin-only user API to search and filter accounts,
+create or edit them in a popup, and activate or deactivate them. Deactivation
+asks for confirmation; the server protects the signed-in admin and the last
+active admin. The current API response has a numeric role ID but no role name,
+so the list marks each role unavailable and editing keeps the existing role
+unless an admin chooses a new one. These new backend routes must be deployed before the page
+can load from the default deployed API.
+
 ## Why it is separate from the backend
 
 The backend is a Maven project under `server/`. The Docker build context is

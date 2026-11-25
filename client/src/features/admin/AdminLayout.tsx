@@ -37,6 +37,14 @@ function AdminMenu({ onNavigate, onSignOut, showTheme = false }: AdminMenuProps)
           <AdminIcon name="products" />
           Products
         </NavLink>
+        <NavLink
+          className={({ isActive }) => `${styles.navLink} ${isActive ? styles.active : ''}`}
+          to={paths.adminUsers}
+          onClick={onNavigate}
+        >
+          <AdminIcon name="users" />
+          Users
+        </NavLink>
       </nav>
       <div className={styles.footerActions}>
         {showTheme && <ThemeToggle />}
