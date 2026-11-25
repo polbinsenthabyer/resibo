@@ -23,6 +23,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class UserServiceImplTest {
 
+    // NOTE: the service calls saveAndFlush, not save — see the "fixed" ledger
+    // entry for why. These mocks were updated in lockstep; stubbing save()
+    // here would silently never be hit.
     @Mock private UserRepository userRepository;
     @Mock private UserUtility userUtility;
     @Mock private SecurityUtil securityUtil;
@@ -32,7 +35,7 @@ class UserServiceImplTest {
     void setRejectsNullDto() {
         ResponseDto res = service.setUser(null);
         assertThat(res.getCode()).isEqualTo("E0001");
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -85,7 +88,7 @@ class UserServiceImplTest {
         dto.setPassword("password123");
 
         assertThat(service.setUser(dto).getCode()).isEqualTo("E0104");
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -93,7 +96,7 @@ class UserServiceImplTest {
         when(securityUtil.currentUsername()).thenReturn("polbinsent");
         when(securityUtil.hashPassword("password123")).thenReturn("HASHED");
         when(userUtility.findRoleIdByRoleType(UserRoleType.EMPLOYEE)).thenReturn(2L);
-        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(i -> i.getArgument(0));
 
         UserDto dto = new UserDto();
         dto.setUsername("  newhire  ");
@@ -103,7 +106,7 @@ class UserServiceImplTest {
         assertThat(res.isSuccess()).isTrue();
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(saved.capture());
+        verify(userRepository).saveAndFlush(saved.capture());
         User u = saved.getValue();
         assertThat(u.getUsername()).isEqualTo("newhire");
         assertThat(u.getPassword()).isEqualTo("HASHED");
@@ -117,7 +120,7 @@ class UserServiceImplTest {
     void setCreateHonoursExplicitAdminRole() {
         when(securityUtil.hashPassword(any())).thenReturn("HASHED");
         when(userUtility.findRoleIdByRoleType(UserRoleType.ADMIN)).thenReturn(1L);
-        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(i -> i.getArgument(0));
 
         UserDto dto = new UserDto();
         dto.setUsername("newadmin");
@@ -127,7 +130,7 @@ class UserServiceImplTest {
         service.setUser(dto);
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(saved.capture());
+        verify(userRepository).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getUserRoleId()).isEqualTo(1L);
     }
 
@@ -142,7 +145,7 @@ class UserServiceImplTest {
         existing.setIsActive(true);
         when(userRepository.findById(5L)).thenReturn(java.util.Optional.of(existing));
         when(userUtility.roleTypeOf(existing)).thenReturn(UserRoleType.EMPLOYEE);
-        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(i -> i.getArgument(0));
 
         UserDto dto = new UserDto();
         dto.setId(5L);
@@ -152,7 +155,7 @@ class UserServiceImplTest {
         assertThat(service.setUser(dto).isSuccess()).isTrue();
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(saved.capture());
+        verify(userRepository).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getUserRoleId()).isEqualTo(2L);   // unchanged, not reset
         assertThat(saved.getValue().getIsActive()).isTrue();          // untouched by /set
     }
@@ -165,7 +168,7 @@ class UserServiceImplTest {
         existing.setPassword("OLD_HASH");
         when(userRepository.findById(6L)).thenReturn(java.util.Optional.of(existing));
         when(userUtility.roleTypeOf(existing)).thenReturn(UserRoleType.EMPLOYEE);
-        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(i -> i.getArgument(0));
 
         UserDto dto = new UserDto();
         dto.setId(6L);
@@ -174,7 +177,7 @@ class UserServiceImplTest {
         service.setUser(dto);
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(saved.capture());
+        verify(userRepository).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getPassword()).isEqualTo("OLD_HASH");
         verify(securityUtil, never()).hashPassword(any());
     }
@@ -194,7 +197,7 @@ class UserServiceImplTest {
         dto.setUsername("POL");   // different case, same row as "pol"
 
         assertThat(service.setUser(dto).getCode()).isEqualTo("E0104");
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -205,7 +208,7 @@ class UserServiceImplTest {
         dto.setUsername("ghost");
 
         assertThat(service.setUser(dto).getCode()).isEqualTo("E0201");
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -224,7 +227,7 @@ class UserServiceImplTest {
         dto.setRole("EMPLOYEE");
 
         assertThat(service.setUser(dto).getCode()).isEqualTo("E0202");
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -245,7 +248,7 @@ class UserServiceImplTest {
         dto.setRole("EMPLOYEE");
 
         assertThat(service.setUser(dto).getCode()).isEqualTo("E0203");
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -260,7 +263,7 @@ class UserServiceImplTest {
         when(userUtility.findRoleIdByRoleType(UserRoleType.ADMIN)).thenReturn(1L);
         when(userRepository.countActiveUsersByRoleId(1L)).thenReturn(2L);   // two active admins
         when(userUtility.findRoleIdByRoleType(UserRoleType.EMPLOYEE)).thenReturn(2L);
-        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(i -> i.getArgument(0));
 
         UserDto dto = new UserDto();
         dto.setId(2L);
@@ -278,7 +281,7 @@ class UserServiceImplTest {
         when(userUtility.findByUsername("renamed")).thenReturn(null);
         when(userRepository.findById(5L)).thenReturn(java.util.Optional.of(existing));
         when(userUtility.roleTypeOf(existing)).thenReturn(UserRoleType.EMPLOYEE);
-        when(userRepository.save(any(User.class)))
+        when(userRepository.saveAndFlush(any(User.class)))
                 .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate"));
 
         UserDto dto = new UserDto();
@@ -362,12 +365,12 @@ class UserServiceImplTest {
         u.setUserRoleId(2L);
         when(userUtility.findById(3L)).thenReturn(u);
         when(securityUtil.currentUsername()).thenReturn("polbinsent");
-        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(i -> i.getArgument(0));
 
         assertThat(service.activateUser(3L).isSuccess()).isTrue();
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(saved.capture());
+        verify(userRepository).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getIsActive()).isTrue();
         assertThat(saved.getValue().getPassword()).isEqualTo("UNCHANGED_HASH");
         assertThat(saved.getValue().getUserRoleId()).isEqualTo(2L);
@@ -389,7 +392,7 @@ class UserServiceImplTest {
         when(securityUtil.currentUsername()).thenReturn("polbinsent");
 
         assertThat(service.deactivateUser(1L).getCode()).isEqualTo("E0202");
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -405,7 +408,7 @@ class UserServiceImplTest {
         when(securityUtil.currentUsername()).thenReturn("POLBINSENT");
 
         assertThat(service.deactivateUser(1L).getCode()).isEqualTo("E0202");
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -421,7 +424,7 @@ class UserServiceImplTest {
         when(userRepository.countActiveUsersByRoleId(1L)).thenReturn(1L);
 
         assertThat(service.deactivateUser(2L).getCode()).isEqualTo("E0203");
-        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -433,7 +436,7 @@ class UserServiceImplTest {
         when(userUtility.findById(4L)).thenReturn(employee);
         when(securityUtil.currentUsername()).thenReturn("polbinsent");
         when(userUtility.roleTypeOf(employee)).thenReturn(UserRoleType.EMPLOYEE);
-        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(i -> i.getArgument(0));
 
         assertThat(service.deactivateUser(4L).isSuccess()).isTrue();
         verify(userRepository, never()).countActiveUsersByRoleId(any());
@@ -450,11 +453,78 @@ class UserServiceImplTest {
         when(userUtility.roleTypeOf(target)).thenReturn(UserRoleType.ADMIN);
         when(userUtility.findRoleIdByRoleType(UserRoleType.ADMIN)).thenReturn(1L);
         when(userRepository.countActiveUsersByRoleId(1L)).thenReturn(2L);
-        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(i -> i.getArgument(0));
 
         assertThat(service.deactivateUser(2L).isSuccess()).isTrue();
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
-        verify(userRepository).save(saved.capture());
+        verify(userRepository).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getIsActive()).isFalse();
+    }
+
+    // --- fix-pass additions, from the final review ------------------------
+
+    @Test
+    void setRejectsNameLongerThanTheColumnOnCreate() {
+        UserDto dto = new UserDto();
+        dto.setUsername("newhire");
+        dto.setPassword("password123");
+        dto.setName("x".repeat(101));
+
+        assertThat(service.setUser(dto).getCode()).isEqualTo("E0204");
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void setRejectsNameLongerThanTheColumnOnUpdate() {
+        UserDto dto = new UserDto();
+        dto.setId(5L);
+        dto.setUsername("staffer");
+        dto.setName("x".repeat(101));
+
+        assertThat(service.setUser(dto).getCode()).isEqualTo("E0204");
+        verify(userRepository, never()).findById(any());
+        verify(userRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void listRejectsAnUnparseableRoleFilterInsteadOfReturningEveryAccount() {
+        com.api.resibo.dtos.UserListDto dto = new com.api.resibo.dtos.UserListDto();
+        dto.setRole("MANAGER");   // not ADMIN or EMPLOYEE
+
+        assertThat(service.listUsers(dto).getCode()).isEqualTo("E0105");
+        verify(userRepository, never()).search(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void listReportsOperatorErrorWhenTheFilteredRoleRowIsMissing() {
+        // A role name that parses but has no row in user_role — the schema
+        // was not fully applied. Must not silently return an unfiltered or
+        // empty list as if the filter worked.
+        when(userUtility.findRoleIdByRoleType(UserRoleType.ADMIN)).thenReturn(null);
+
+        com.api.resibo.dtos.UserListDto dto = new com.api.resibo.dtos.UserListDto();
+        dto.setRole("admin");
+
+        assertThat(service.listUsers(dto).getCode()).isEqualTo("E9999");
+        verify(userRepository, never()).search(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void listFallsBackToIdWhenSortByIsExplicitlyNullRatherThanThrowing() {
+        when(userRepository.search(any(), any(), any(), any(), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(
+                        java.util.List.of(),
+                        org.springframework.data.domain.PageRequest.of(0, 10), 0));
+
+        com.api.resibo.dtos.UserListDto dto = new com.api.resibo.dtos.UserListDto();
+        dto.setSortBy(null);   // Jackson produces this for an explicit JSON null
+
+        ResponseDto res = service.listUsers(dto);
+        assertThat(res.isSuccess()).isTrue();
+
+        ArgumentCaptor<org.springframework.data.domain.Pageable> pageable =
+                ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
+        verify(userRepository).search(any(), any(), any(), any(), pageable.capture());
+        assertThat(pageable.getValue().getSort().getOrderFor("id")).isNotNull();
     }
 }

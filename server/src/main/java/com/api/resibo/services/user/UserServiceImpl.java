@@ -19,6 +19,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Date;
 import java.util.Map;
@@ -57,6 +59,12 @@ public class UserServiceImpl implements UserService {
         }
         if (username.length() > 100) {
             return ResponseUtility.getErrorResponse("E0102", MessageType.ERROR_USERNAME_TOO_LONG);
+        }
+        // Checked here rather than left to the database, same reasoning as
+        // ProductServiceImpl's productDescription check: a column-length
+        // violation surfaces as an opaque SQL error, not a usable message.
+        if (dto.getName() != null && dto.getName().length() > 100) {
+            return ResponseUtility.getErrorResponse("E0204", MessageType.ERROR_NAME_TOO_LONG);
         }
 
         boolean isCreate = dto.getId() == null;
@@ -145,13 +153,35 @@ public class UserServiceImpl implements UserService {
             user.setUpdatedBy(actor);
             user.setUpdatedAt(now);
 
+            // saveAndFlush, not save: on the update path the entity loaded by
+            // findById is already managed, so a plain save() defers the
+            // UPDATE to commit-time flush — after this method has already
+            // returned — and a unique-constraint violation would surface as
+            // an unhandled 500 instead of the E0104 below. Flushing inside
+            // the try makes the violation happen, and be caught, here.
             return ResponseUtility.getSuccessResponse(
-                    MessageType.SUCCESSFULLY_SET_USER, userRepository.save(user));
+                    MessageType.SUCCESSFULLY_SET_USER, userRepository.saveAndFlush(user));
         } catch (DataIntegrityViolationException e) {
             log.warn("setUser hit a constraint violation for username={}", username);
+            // Guarded: currentTransactionStatus() throws NoTransactionException
+            // outside a real Spring-managed transaction, which is exactly the
+            // case in UserServiceImplTest — no Spring context, by design.
+            if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            }
             return ResponseUtility.getErrorResponse("E0104", MessageType.ERROR_USERNAME_ALREADY_EXISTS);
         } catch (Exception e) {
             log.error("setUser failed for id={}", dto.getId(), e);
+            // Without this, a managed entity already mutated above (e.g. a
+            // role or password change applied before an unrelated failure)
+            // would still be flushed at commit — the caller told "it
+            // failed" while the database quietly did it anyway.
+            // Guarded: currentTransactionStatus() throws NoTransactionException
+            // outside a real Spring-managed transaction, which is exactly the
+            // case in UserServiceImplTest — no Spring context, by design.
+            if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            }
             return ResponseUtility.getErrorResponse("E9999", MessageType.ERROR_SOMETHING_WENT_WRONG);
         }
     }
@@ -168,7 +198,12 @@ public class UserServiceImpl implements UserService {
             int size = dto.getSize() == null || dto.getSize() < 1
                     ? 10 : Math.min(dto.getSize(), MAX_PAGE_SIZE);
 
-            String sortColumn = SORT_COLUMNS.getOrDefault(dto.getSortBy(), "id");
+            // dto.getSortBy() can be an explicit JSON null (Jackson overwrites
+            // the field's "id" default), and Map.of(...)'s getOrDefault(null, ..)
+            // throws NPE rather than returning the default — guard before the
+            // lookup, not inside it.
+            String sortColumn = dto.getSortBy() == null
+                    ? "id" : SORT_COLUMNS.getOrDefault(dto.getSortBy(), "id");
             Sort.Direction direction = "DESC".equalsIgnoreCase(dto.getSortDirection())
                     ? Sort.Direction.DESC : Sort.Direction.ASC;
 
@@ -177,8 +212,25 @@ public class UserServiceImpl implements UserService {
             boolean exact = Boolean.TRUE.equals(dto.getIsExactMatch());
 
             String rawRole = dto.getRole();
-            UserRoleType roleFilter = rawRole == null || rawRole.isBlank() ? null : parseRole(rawRole);
-            Long userRoleId = roleFilter == null ? null : userUtility.findRoleIdByRoleType(roleFilter);
+            Long userRoleId = null;
+            if (rawRole != null && !rawRole.isBlank()) {
+                UserRoleType roleFilter = parseRole(rawRole);
+                if (roleFilter == null) {
+                    // An unparseable filter must not silently become "no
+                    // filter" — that would hand back every account,
+                    // including admins, to a caller who typoed a role name.
+                    return ResponseUtility.getErrorResponse("E0105", MessageType.ERROR_INVALID_ROLE);
+                }
+                userRoleId = userUtility.findRoleIdByRoleType(roleFilter);
+                if (userRoleId == null) {
+                    // The role parsed but has no row in user_role — the
+                    // schema was not fully applied. Same defensive pattern as
+                    // the create path: log it, do not quietly return an
+                    // empty or unfiltered page as if the filter worked.
+                    log.error("Role {} is missing from user_role. Apply sql/tables/user_role.sql.", roleFilter);
+                    return ResponseUtility.getErrorResponse("E9999", MessageType.ERROR_SOMETHING_WENT_WRONG);
+                }
+            }
 
             Page<User> result = userRepository.search(
                     exact ? username : null,
@@ -222,10 +274,16 @@ public class UserServiceImpl implements UserService {
             user.setIsActive(Boolean.TRUE);
             user.setUpdatedBy(securityUtil.currentUsername());
             user.setUpdatedAt(new Date());
-            userRepository.save(user);
+            userRepository.saveAndFlush(user);
             return ResponseUtility.getSuccessResponse(MessageType.SUCCESSFULLY_ACTIVATED_USER);
         } catch (Exception e) {
             log.error("activateUser failed for id={}", userId, e);
+            // Guarded: currentTransactionStatus() throws NoTransactionException
+            // outside a real Spring-managed transaction, which is exactly the
+            // case in UserServiceImplTest — no Spring context, by design.
+            if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            }
             return ResponseUtility.getErrorResponse("E9999", MessageType.ERROR_SOMETHING_WENT_WRONG);
         }
     }
@@ -258,10 +316,16 @@ public class UserServiceImpl implements UserService {
             user.setIsActive(Boolean.FALSE);
             user.setUpdatedBy(caller);
             user.setUpdatedAt(new Date());
-            userRepository.save(user);
+            userRepository.saveAndFlush(user);
             return ResponseUtility.getSuccessResponse(MessageType.SUCCESSFULLY_DEACTIVATED_USER);
         } catch (Exception e) {
             log.error("deactivateUser failed for id={}", userId, e);
+            // Guarded: currentTransactionStatus() throws NoTransactionException
+            // outside a real Spring-managed transaction, which is exactly the
+            // case in UserServiceImplTest — no Spring context, by design.
+            if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            }
             return ResponseUtility.getErrorResponse("E9999", MessageType.ERROR_SOMETHING_WENT_WRONG);
         }
     }

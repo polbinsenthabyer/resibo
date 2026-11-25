@@ -151,7 +151,11 @@ public class ProductServiceImpl implements ProductService {
                     ? 10 : Math.min(dto.getSize(), MAX_PAGE_SIZE);
 
             // Resolve to a column name; unknown values fall back to id.
-            String sortColumn = SORT_COLUMNS.getOrDefault(dto.getSortBy(), "id");
+            // dto.getSortBy() can be an explicit JSON null (Jackson overwrites
+            // the field's "id" default), and Map.of(...)'s getOrDefault(null, ..)
+            // throws NPE rather than returning the default — guard first.
+            String sortColumn = dto.getSortBy() == null
+                    ? "id" : SORT_COLUMNS.getOrDefault(dto.getSortBy(), "id");
             Sort.Direction direction = "DESC".equalsIgnoreCase(dto.getSortDirection())
                     ? Sort.Direction.DESC : Sort.Direction.ASC;
 

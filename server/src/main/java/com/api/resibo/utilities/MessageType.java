@@ -42,6 +42,7 @@ public class MessageType {
 
     // --- user management (admin) -----------------------------------------
     public static final String ERROR_USER_NOT_EXIST = "ERROR USER DOES NOT EXIST";
+    public static final String ERROR_NAME_TOO_LONG = "ERROR NAME EXCEEDS 100 CHARACTERS";
     public static final String ERROR_CANNOT_MODIFY_OWN_ACCOUNT = "ERROR ADMIN CANNOT DEACTIVATE OR DEMOTE THEIR OWN ACCOUNT";
     public static final String ERROR_LAST_ACTIVE_ADMIN = "ERROR CANNOT DEACTIVATE OR DEMOTE THE LAST ACTIVE ADMIN";
     public static final String SUCCESSFULLY_SET_USER = "SUCCESSFULLY SET USER";

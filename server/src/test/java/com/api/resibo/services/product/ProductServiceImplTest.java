@@ -319,5 +319,22 @@ class ProductServiceImplTest {
         assertThat(service.deleteProductById(3L).isSuccess()).isTrue();
         verify(productRepository).deleteById(3L);
     }
+
+    // --- fix-pass addition, found while fixing the identical bug in UserServiceImpl ---
+
+    @Test
+    void listFallsBackToIdWhenSortByIsExplicitlyNullRatherThanThrowing() {
+        when(productRepository.search(any(), any(), any(), any(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
+
+        ProductListDto dto = new ProductListDto();
+        dto.setSortBy(null);   // Jackson produces this for an explicit JSON null
+
+        assertThat(service.listProduct(dto).isSuccess()).isTrue();
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(productRepository).search(any(), any(), any(), any(), any(), pageable.capture());
+        assertThat(pageable.getValue().getSort().getOrderFor("id")).isNotNull();
+    }
 }
 
