@@ -58,17 +58,14 @@ from the [SpongeBob SquarePants GIPHY channel](https://giphy.com/gifs/dancing-hi
 
 ## Visual assets
 
-Generate new Resibo logos, icons, illustrations, and other original graphics
-with Magnific and save them in its `pol` project. Keep original exports in
-`design/magnific/` and web-ready versions in `public/`. The receipt-and-arrow
-mark in `public/resibo-logo.svg` was generated and traced in
-Magnific. Its source PNG and original SVG are in `design/magnific/`. The web
-version is cropped and adapts its blue to dark browser themes. The header and
-favicon use that same SVG. The temporary GIF above predates this asset policy.
-The admin sidebar, admin action buttons, and theme toggle use Magnific-generated
-SVG icons from `pol`. Original exports and creation links are in
-[`design/magnific/README.md`](design/magnific/README.md); compact web copies
-are in `public/icons/`. Icon-only controls have accessible names and titles.
+Routine interface icons come from Lucide React; call Magnific only when the
+owner explicitly asks for a generated visual. The receipt-and-arrow mark in
+`public/resibo-logo.svg` was requested from Magnific. Its source PNG, original
+SVG, and creation link are in [`design/magnific/`](design/magnific/README.md).
+The web version is cropped and adapts its blue to dark browser themes. The
+header and favicon use that SVG. The temporary GIF above predates this rule.
+The admin sidebar, action buttons, and theme toggle use Lucide icons. Icon-only
+controls have accessible names and titles.
 
 ## Authentication pages
 

@@ -3,13 +3,4 @@
   flex: none;
   width: 1.4rem;
   height: 1.4rem;
-  object-fit: contain;
-}
-
-.next {
-  transform: scaleX(-1);
-}
-
-:global(:root[data-theme='dark']) .icon {
-  filter: brightness(1.7);
 }

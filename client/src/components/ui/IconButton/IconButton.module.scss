@@ -4,11 +4,3 @@
   height: 2.75rem;
   padding: var(--space-2);
 }
-
-.onFill img {
-  filter: brightness(0) invert(1);
-}
-
-:global(:root[data-theme='dark']) .onFill img {
-  filter: brightness(0);
-}

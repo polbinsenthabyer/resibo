@@ -1,3 +1,19 @@
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  LayoutDashboard,
+  LogOut,
+  Package,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+
 import styles from './AdminIcon.module.scss'
 
 export type AdminIconName =
@@ -19,14 +35,23 @@ interface AdminIconProps {
   className?: string
 }
 
-/** Magnific-generated icons from the `pol` project. Text labels live on controls. */
+const icons: Record<AdminIconName, LucideIcon> = {
+  overview: LayoutDashboard,
+  products: Package,
+  signout: LogOut,
+  add: Plus,
+  search: Search,
+  close: X,
+  edit: Pencil,
+  delete: Trash2,
+  refresh: RefreshCw,
+  previous: ChevronLeft,
+  next: ChevronRight,
+  save: Check,
+}
+
+/** Shared Lucide symbols. Control labels remain separate and accessible. */
 export function AdminIcon({ name, className = '' }: AdminIconProps) {
-  return (
-    <img
-      className={`${styles.icon} ${name === 'next' ? styles.next : ''} ${className}`}
-      src={`/icons/admin-${name === 'next' ? 'previous' : name}.svg`}
-      alt=""
-      aria-hidden="true"
-    />
-  )
+  const Icon = icons[name]
+  return <Icon className={`${styles.icon} ${className}`} aria-hidden="true" strokeWidth={1.9} />
 }

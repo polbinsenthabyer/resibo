@@ -66,10 +66,10 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.27 — Magnific admin and theme icons; scope still unfilled |
+| Document version | 0.28 — Lucide UI icons; Magnific by explicit request only; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-25 |
-| Last updated by | Codex (admin and theme icon controls) |
+| Last updated by | Codex (icon source correction) |
 | Plan status | **AWAITING OWNER INPUT** — the API is deployed and authenticated (§5.4, §7.3), and the React client is now deployed too, at `https://resibo.polbinsenthabyer.uk` (§5.6, §7.4). There is still no checkout, no sale and no receipt, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
 | Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` on `dev/resibo`. A second clone at `%USERPROFILE%\sprintify_solutions\personal\app\resibo` is a duplicate; do not edit it until its fate is decided. |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
@@ -1090,9 +1090,8 @@ The health page includes a locally bundled SpongeBob dancing GIF as a visible
 client pipeline test (2026-11-24). It changes no API behavior. Remove the
 test image when this page becomes a product screen.
 
-**Brand assets (2026-11-25).** The owner chose Magnific for new Resibo logos,
-icons, illustrations, and other original graphics. Save generated work in the
-Magnific `pol` project. The first receipt-shaped R was rejected after preview
+**Brand assets (2026-11-25).** The owner requested the Resibo logo from Magnific
+and it is saved in the `pol` project. The first receipt-shaped R was rejected after preview
 as too generic. Its replacement is a blue printed receipt with a warm apricot
 forward arrow, connecting the POS transaction to the receipt. The selected
 Magnific PNG and traced SVG are kept in `client/design/magnific/`; the cropped,
@@ -1101,14 +1100,15 @@ The SVG adapts its blue to dark browser themes. The name remains text for
 legibility. The older SpongeBob GIF is a temporary pipeline test that predates
 this asset direction.
 
-The admin side menu and admin action controls now use a matching Magnific SVG
-icon set from `pol`; the light/dark theme control uses a Magnific sun/moon
-pair. The original exports are in `client/design/magnific/`, with web copies
-under `client/public/icons/` and source links in the design directory's
-README. The 13 new SVGs cost 4,875 Magnific credits. The side menu keeps text
-labels beside its icons; action buttons use icons with accessible names and
-hover titles. The requested collapsible menu was subsequently withdrawn, so
-the menu remains visible at the far left on desktop and stacks on narrow screens.
+Routine interface icons now come from `lucide-react` rather than generated
+SVG assets. The owner corrected the earlier Magnific-for-all-icons direction:
+call Magnific MCP for a new visual only when explicitly asked. The previously
+generated 13 UI SVGs were removed from the repository; they had cost 4,875
+Magnific credits, recorded here for provenance. The side menu keeps text labels
+beside Lucide icons; action buttons and the theme toggle use icons with
+accessible names and hover titles. The requested collapsible menu was
+subsequently withdrawn, so it stays visible at the far left on desktop and
+stacks on narrow screens.
 
 **UI labels (2026-11-25).** Login and signup no longer print the API target;
 it remains in the client configuration and development documentation. The
@@ -1151,7 +1151,7 @@ No sales, receipts, or permission beyond the existing ADMIN route are invented.
 | Routing | **React Router 7.18**, one route table at `src/app/router.tsx` |
 | Linting / formatting | **oxlint** 1.95 — create-vite's default now, not ESLint — and **Prettier** 3.10 |
 | Dev server | `localhost:5173`. Defaults to the deployed API, as does the production bundle. `VITE_API_BASE_URL=/api` opts into the proxy to a local backend on `localhost:8083`. **Either target can write to the live database; the local backend currently uses the shared live schema too.** |
-| Added to the template | `react-router-dom`; dev-only `sass` and `prettier`. Nothing else. |
+| Added to the template | `react-router-dom`, `lucide-react`; dev-only `sass` and `prettier`. |
 
 #### Where it lives, and why that was a decision
 
@@ -2380,6 +2380,7 @@ trivia the next session cannot reuse.
 | 2026-11-25 | Default the locally running client to the deployed API (§5.6) | The owner explicitly wants the local app to call `resibo-api.polbinsenthabyer.uk` rather than a local backend. This restores the original frontend-alone development behavior while auth writes exist, so signup keeps a clear development warning. `VITE_API_BASE_URL=/api` still offers an intentional local-backend override, whose database is presently shared with production anyway. No backend configuration changes are required. | Owner, implemented by Codex |
 | 2026-11-25 | Build a simple ADMIN workspace on the existing product CRUD API (§5.6) | The owner requested a clean landing page, sidebar, and product management. The backend already implements all four ADMIN product routes, so no server edit or new contract is necessary. A text-only side menu avoids introducing ungenerated icons under the Magnific asset rule. The overview shows only the catalog count available from the API; it does not invent sales metrics. The product UI sends complete update payloads, validates known backend limits, confirms deletes, and handles 401/403 explicitly. Keep the employee placeholder and do not guess the broader POS or permission model. | Owner, implemented by Codex |
 | 2026-11-25 | Keep the admin menu visible and use Magnific icons for sections, actions, and theme (§5.6) | The owner withdrew the requested collapse control and asked for appropriate icons in sidebar sections and icon-only action buttons, including the light/dark control. Generate the icon set in the existing Magnific `pol` project under the standing asset-source rule. Keep visible text beside section icons for orientation, and give each icon-only button an accessible name and title. Reuse Close for clear/cancel and mirror Previous for Next to limit asset count. Keep the menu at the far-left desktop edge and stack it above content on narrow screens. This supersedes the text-only sidebar choice in the preceding decision. | Owner, implemented by Codex |
+| 2026-11-25 | Use Lucide for routine UI icons; Magnific only on explicit request (§5.6) | The owner found generated icons a poor fit for routine controls and corrected the standing asset rule. Replace the Magnific SVG icon set with consistent, tree-shakable React components from Lucide, whose stroke follows the current theme color. Remove the generated icon exports from the repository while retaining the separately requested Magnific logo and favicon. Keep accessible names and 44px targets on icon-only buttons. This supersedes the preceding Magnific-for-every-icon decision; future Magnific calls require a new explicit request. | Owner, implemented by Codex |
 
 ---
 
@@ -2414,3 +2415,4 @@ trivia the next session cannot reuse.
 | 2026-11-25 | 0.25 | Switched local Vite's default API target to the deployed API at the owner's request; retained opt-in `/api` proxy and the signup warning. Updated §5.6, §13, and client config documentation. Local and uncommitted pending preview. | Codex |
 | 2026-11-25 | 0.26 | Added the ADMIN sidebar, overview, and product list/create/edit/delete flow in §5.6 using existing server endpoints; recorded validation, confirmation, 401/403 handling, and why no backend change or new metrics were added. Local and uncommitted pending preview. | Codex |
 | 2026-11-25 | 0.27 | Recorded 13 Magnific-generated sidebar, admin action, and theme SVG icons, their source and cost, and the non-collapsible far-left menu in §5.6/§13. All edits are local; the owner now requests local commits with no push until instructed. | Codex |
+| 2026-11-25 | 0.28 | Replaced routine UI SVG assets with Lucide React icons, narrowed the Magnific rule to explicit requests, and retained the requested logo. Updated §5.6 and §13; verified locally and committed without a push. | Codex |

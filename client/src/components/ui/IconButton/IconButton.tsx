@@ -24,7 +24,7 @@ export function IconButton({
     <Button
       {...rest}
       variant={variant}
-      className={`${styles.iconButton} ${variant !== 'default' ? styles.onFill : ''} ${className}`}
+      className={`${styles.iconButton} ${className}`}
       aria-label={label}
       title={label}
     >
