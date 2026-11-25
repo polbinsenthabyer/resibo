@@ -1,6 +1,6 @@
 # Codex frontend handoff
 
-Updated: 2026-11-24. This file is the short entry point for a new Codex session. Product decisions live in `resibo-plan.md`; dated history and open work live in the four vault notes at `Projects/personal/resibo/`. Read those before relying on this snapshot.
+Updated: 2026-11-25. This file is the short entry point for a new Codex session. Product decisions live in `resibo-plan.md`; dated history and open work live in the four vault notes at `Projects/personal/resibo/`. Read those before relying on this snapshot.
 
 ## Assignment and checkout
 
@@ -13,7 +13,7 @@ Updated: 2026-11-24. This file is the short entry point for a new Codex session.
 - `client/` is a React 19, Vite 8, TypeScript 7, SCSS application. Its UI has login, signup, health (`/status`), and plain ADMIN/EMPLOYEE welcome pages. There is no POS workflow and no frontend test runner. New frontend features must work at narrow and desktop widths, per the owner's standing instruction.
 - `client/src/api/http.ts` is the single fetch path. It unwraps `ResponseDto`; business errors can arrive with HTTP 200. Authentication uses a provisional `localStorage` token helper.
 - Production builds default to the deployed API. Local Vite development now defaults to the `/api` proxy; `VITE_API_BASE_URL` overrides either. The local backend currently uses the shared live database, so its signup path can still create live accounts. Both auth forms show their API target, and signup warns in development.
-- The client is served as static files at `https://resibo.polbinsenthabyer.uk`. The latest recorded local checks passed `npm run lint` and `npm run build`; the last rescan observed HTTP 200 for the client root, a deep link, and API health. A browser render and CI deployment were not verified in that rescan.
+- The client is served as static files at `https://resibo.polbinsenthabyer.uk`. On 2026-11-25, `npm run lint`, `npm run build` (57 modules), and `npm run format:check` passed. This scan did not exercise a browser or the local end-to-end API path. The latest CI deployment evidence remains the 2026-11-24 role and theme release below.
 - The health page includes a locally bundled SpongeBob dancing GIF for the owner's client pipeline test (`b0e35b4`). Local `npm run lint`, `npm run build`, and `npm run format:check` pass; the build copies `spongebob.gif` into `dist/`. The image is temporary and can leave when a real landing page replaces health.
 - Login calls `authApi.login`, stores the returned JWT through the existing token helper, and redirects ADMIN to `/admin` or EMPLOYEE to `/employee`. Those guarded placeholder pages show the requested welcome message and a Sign out button that clears the token and returns to `/login`. Client routing decodes role/expiry for navigation only; the server validates protected API access. Signup sends username, password, and optional name through `authApi.signup`, omits role, and directs the user to login after confirmation. `/` redirects to login or the stored role page; the header has no page links. Its light/dark toggle persists choice in local storage and defaults to the device preference. Shared CSS tokens and mobile rules cover the forms and welcome pages. Commit `4b99b08` passed local lint/build/format, [client CI Build and Deploy](https://github.com/polbinsenthabyer/resibo/actions/runs/45370858224), and live JS/CSS hash comparison. `/`, `/login`, `/signup`, `/admin`, `/employee`, and `/status` served 200 HTML; API health was 200. The JS/CSS contain the expected text/theme/mobile markers. Browser login, client redirects, and visual layout were not tested.
 - The earlier auth-form release passed local lint, build, format, [client CI Build and Deploy](https://github.com/polbinsenthabyer/resibo/actions/runs/45369269628), and public `/login` and `/signup` bundle hash checks. The forms were not visually inspected or submitted in a browser, and no account was created for testing.
@@ -25,7 +25,7 @@ Updated: 2026-11-24. This file is the short entry point for a new Codex session.
 - The product and permission decisions in plan §1–§2 and §6.1.1 remain open. Do not invent them while building checkout, sale, receipt, or role-specific UI.
 - Frontend tests and current documentation reconciliation remain open. Use vault `Tasks.md` for the maintained task list.
 
-**Next action:** capture any issues when the owner tests login, sign-out, role redirect, and both appearance modes. Respect the owner's request to avoid controlling their desktop. Before setting up prelive, fix its vhost name collision. Do not start checkout or receipt UI until the plan's relevant blockers are answered.
+**Next action:** add focused frontend tests for the HTTP envelope and `useAsync`, then capture any issues when the owner tests login, sign-out, role redirect, and both appearance modes. Respect the owner's request to avoid controlling their desktop. Before setting up prelive, fix its vhost name collision. Do not start checkout or receipt UI until the plan's relevant blockers are answered.
 
 ## Update contract for every frontend change
 
