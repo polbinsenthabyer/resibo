@@ -40,6 +40,14 @@ public class MessageType {
     public static final String SUCCESSFULLY_SET_PRODUCT = "SUCCESSFULLY SET PRODUCT";
     public static final String SUCCESSFULLY_DELETED_PRODUCT = "SUCCESSFULLY DELETED PRODUCT";
 
+    // --- user management (admin) -----------------------------------------
+    public static final String ERROR_USER_NOT_EXIST = "ERROR USER DOES NOT EXIST";
+    public static final String ERROR_CANNOT_MODIFY_OWN_ACCOUNT = "ERROR ADMIN CANNOT DEACTIVATE OR DEMOTE THEIR OWN ACCOUNT";
+    public static final String ERROR_LAST_ACTIVE_ADMIN = "ERROR CANNOT DEACTIVATE OR DEMOTE THE LAST ACTIVE ADMIN";
+    public static final String SUCCESSFULLY_SET_USER = "SUCCESSFULLY SET USER";
+    public static final String SUCCESSFULLY_ACTIVATED_USER = "SUCCESSFULLY ACTIVATED USER";
+    public static final String SUCCESSFULLY_DEACTIVATED_USER = "SUCCESSFULLY DEACTIVATED USER";
+
     private MessageType() {
         // constants only
     }
