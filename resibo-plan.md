@@ -66,10 +66,10 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.30 — mobile admin drawer and catalog layout; scope still unfilled |
+| Document version | 0.31 — admin user management API at `/api/admin/users/**`; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-25 |
-| Last updated by | Codex (mobile admin navigation and catalog layout) |
+| Last updated by | Claude (admin user management API) |
 | Plan status | **AWAITING OWNER INPUT** — the API is deployed and authenticated (§5.4, §7.3), and the React client is now deployed too, at `https://resibo.polbinsenthabyer.uk` (§5.6, §7.4). There is still no checkout, no sale and no receipt, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
 | Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` on `dev/resibo`. A second clone at `%USERPROFILE%\sprintify_solutions\personal\app\resibo` is a duplicate; do not edit it until its fate is decided. |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
@@ -539,9 +539,10 @@ and no `JWT_SECRET`, while `ResiboApplicationTests` starts the full context.
 Recorded as §12 #20; both files are outside the documentation change that found
 it.
 
-**The API surface, in full.** Eight endpoints. All return the standard envelope
-except `/actuator/health`, which returns Actuator's own shape. The "who" column
-is enforced by `SecurityConfig` (§5.4), not by annotations on the controllers.
+**The API surface, in full.** Thirteen endpoints. All return the standard
+envelope except `/actuator/health`, which returns Actuator's own shape. The
+"who" column is enforced by `SecurityConfig` (§5.4), not by annotations on
+the controllers.
 
 | Endpoint | Who | Purpose |
 |---|---|---|
@@ -553,6 +554,11 @@ is enforced by `SecurityConfig` (§5.4), not by annotations on the controllers.
 | `POST /api/admin/products/list` | ADMIN | Filtered, sorted, paginated listing |
 | `GET /api/admin/products/get/{productId}` | ADMIN | One product |
 | `DELETE /api/admin/products/delete/{productId}` | ADMIN | Delete one product |
+| `POST /api/admin/users/set` | ADMIN | Create when the payload has no id, update when it does. Role defaults to EMPLOYEE and the account starts active on create |
+| `POST /api/admin/users/list` | ADMIN | Filtered, sorted, paginated listing by username, role and active status |
+| `GET /api/admin/users/get/{userId}` | ADMIN | One account |
+| `POST /api/admin/users/activate/{userId}` | ADMIN | Sets the account active |
+| `POST /api/admin/users/deactivate/{userId}` | ADMIN | Sets the account inactive. Refuses the caller's own account and the last active ADMIN |
 
 The listing is a `POST` despite being a read: the filter and pagination payload
 belongs in a request body, and a `GET` body is not reliably carried by proxies,
@@ -2397,6 +2403,7 @@ trivia the next session cannot reuse.
 | 2026-11-25 | Open Add and Edit product in a modal popup (§5.6) | The owner wants product editing to stay in context over the list. Move the existing form into a labelled, keyboard-contained overlay and restore focus to its trigger on close. Keep the shared backend feedback visible above the overlay and repeat failed-save text inside the form for assistive technology. Preserve API behavior and the same validation; make the popup scroll within narrow viewports. | Owner, implemented by Codex |
 | 2026-11-25 | Use a slide-in drawer for mobile admin navigation (§5.6) | The owner wants a conventional mobile side menu. Keep the far-left sidebar fully visible on desktop, where the earlier collapse request was withdrawn. Put the burger at the right of the Resibo header on mobile and remove the extra Admin strip. A left-sliding drawer and backdrop reveal the same links, with icon-only theme and Sign out controls together at the bottom. Close on Escape, backdrop, close button, or route choice; synchronize theme controls across viewport changes. No route or backend behavior changes. | Owner, implemented by Codex |
 | 2026-11-25 | Flatten the mobile product catalog (§5.6) | The owner highlighted the phone product screen as too boxed in. The outer catalog panel and product cards each added border and padding, narrowing the usable width. Remove the outer mobile panel treatment, consolidate the count with the view toggle, and reduce redundant heading text while preserving the full desktop panel and all product data and actions. | Owner, implemented by Codex |
+| 2026-11-25 | **Admin user management added at `/api/admin/users/**`** — create/update, list, get, activate, deactivate for both ADMIN and EMPLOYEE accounts, no hard delete (§5.1) | Owner's request: an admin-only surface to manage staff accounts, matching how an authenticated admin could already name a role during signup, but as a real management surface rather than buried in the public signup contract. Activation is a dedicated pair of endpoints rather than folded into `/set`, per the owner's explicit preference, so a profile edit can never silently flip it. No hard delete, because `user.is_active` already exists for exactly this and a user row is the kind of thing a future sales/audit record will reference. Two new safeguards — an admin cannot deactivate or demote their own account, and cannot deactivate or demote the last remaining active admin — exist because the first-signup bootstrap bug found during the 2026-11-25 scan already showed this kind of lockout is reachable; this feature must not add a second way to cause it. Implemented test-first: 29 Mockito unit tests in `UserServiceImplTest`, no Spring context and no database, mirroring `ProductServiceImplTest`'s style. | Owner, safeguards by Claude |
 
 ---
 
@@ -2434,3 +2441,4 @@ trivia the next session cannot reuse.
 | 2026-11-25 | 0.28 | Replaced routine UI SVG assets with Lucide React icons, narrowed the Magnific rule to explicit requests, and retained the requested logo. Updated §5.6 and §13; verified locally and committed without a push. | Codex |
 | 2026-11-25 | 0.29 | Added a persistent joined row/card toggle and a modal Add/Edit editor in §5.6 and §13; both views use the same product page and controls. Verified locally, then pushed at the owner's request. | Codex |
 | 2026-11-25 | 0.30 | Added a left-sliding mobile admin drawer from the Resibo header, put theme and Sign out icons together at its bottom, and flattened the phone catalog layout; retained the desktop sidebar. Recorded rationale in §13; verified and committed for push. | Codex |
+| 2026-11-25 | 0.31 | Added the admin user management API — `POST/GET /api/admin/users/{set,list,get/{id}}` plus dedicated `POST /activate/{id}` and `POST /deactivate/{id}` — to §5.1's endpoint table (eight endpoints → thirteen) and §13. Backend only; no frontend screen. | Claude |
