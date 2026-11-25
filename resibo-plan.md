@@ -66,10 +66,10 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.34 — admin Users push and deployment status; scope still unfilled |
+| Document version | 0.35 — backend CI deploy registered and verified live; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-25 |
-| Last updated by | Codex (admin Users deployment status) |
+| Last updated by | Claude (registered the backend deploy runner, enabled CI deploy) |
 | Plan status | **AWAITING OWNER INPUT** — the API is deployed and authenticated (§5.4, §7.3), and the React client is now deployed too, at `https://resibo.polbinsenthabyer.uk` (§5.6, §7.4). There is still no checkout, no sale and no receipt, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
 | Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` on `dev/resibo`. A second clone at `%USERPROFILE%\sprintify_solutions\personal\app\resibo` is a duplicate; do not edit it until its fate is decided. |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
@@ -1605,7 +1605,7 @@ behind it** — it serves health, auth, and an admin-only product catalog (§5.4
 |---|---|
 | Server | Self-hosted on the owner's LAN, Ubuntu, shared with the sibling projects. Address, account, and password are in the handover file (§8) — **deliberately not written here, because this repository is public.** |
 | Server OS / specs | Ubuntu (version still unconfirmed — not needed now that the build runs in a container) |
-| How we deploy (git pull + restart / Docker / CI pipeline) | **Docker, from a git checkout on the server** — `git pull` then `scripts/deploy.sh`, which builds the image there, restarts, health-gates, and rolls back on failure. Full procedure in §7.3. `.github/workflows/ci.yml` now exists: its `build` job is the test gate (and the reason for the CI service container, §5.3), and it **declares** a `deploy` job that runs the same `scripts/deploy.sh` on a self-hosted runner labelled `resibo-deploy`. The manual command in §7.3 is still the documented path, and the CI-driven one is not described there — see §12 #16. |
+| How we deploy (git pull + restart / Docker / CI pipeline) | **CI-driven, since 2026-11-25.** `.github/workflows/server-ci.yml`'s `build` job is the test gate; its `deploy` job runs `scripts/deploy.sh` on a self-hosted runner labelled `resibo-deploy`, now registered and online (service `actions.runner.polbinsenthabyer-resibo.resibo-deploy`, alongside the existing `resibo-client-deploy`), with the repository variable `DEPLOY_ENABLED=true`. A push to `dev/resibo` touching `server/**` (or a manual `workflow_dispatch`) now deploys automatically, the same way `client-ci.yml` already did for the frontend. The manual command below still works and is the documented fallback if the runner is ever down. §12 #16 closed. |
 | Domain name | `resibo-api.polbinsenthabyer.uk` — a subdomain of the zone that already serves the sibling projects. No new domain was bought. |
 | Cloudflare role: DNS only / proxied / Tunnel / Access in front of admin | **Proxied DNS over a Cloudflare Tunnel.** The existing `personal-projects` tunnel is reused rather than a new one created; a `CNAME` points the hostname at it. **No edge authentication sits in front of it** — Cloudflare Access is not configured, so anything the application does not protect itself is open to the internet. Since 2026-11-24 the application does protect itself (§5.4), which changes this from a live hole to a hardening question: §12 #12. Public signup is the part that is still open by design (§8.1 risk 6). |
 | TLS: Cloudflare origin cert / Let's Encrypt | **Neither.** TLS terminates at Cloudflare's edge and the tunnel carries the request to the origin, so the origin holds no certificate: nginx listens on plain HTTP on loopback, and the container is published on loopback. Nothing on the LAN speaks TLS and nothing needs to. |
@@ -1825,11 +1825,42 @@ so no session concludes `deploy.sh` is all there is: `scripts/rollback.sh`
 performs exactly the manual swap above — for the case where the deploy
 succeeded, health passed, and the build turned out to be bad anyway — and
 `scripts/setup-server.sh` is an idempotent server bootstrap that creates the
-deployment directory, the env file, the nginx vhost, and a **self-hosted GitHub
-Actions runner** labelled `resibo-deploy`. The runner is the other half of the
-CI `deploy` job, and the whole CI-driven path is the documentation gap tracked
-as §12 #16. Until that is closed, the manual command above is the procedure of
-record.
+deployment directory, the env file, and the nginx vhost (its runner-registration
+step was not used in the end — see below).
+
+#### Backend CI deploy — live since 2026-11-25
+
+`scripts/setup-server.sh`'s runner step was written for this but never run; the
+runner was installed by hand instead, in its own directory
+(`/opt/resibo/actions-runner-deploy`, distinct from the client's
+`/opt/resibo/actions-runner`, so the two deploy pipelines share nothing) —
+same version (`2.338.2`) as the client runner, registered with a fresh,
+single-use registration token fetched from GitHub's API, installed as a
+systemd service (`actions.runner.polbinsenthabyer-resibo.resibo-deploy`), and
+started. The service runs as `sprintify-server`, the same account every other
+deploy step already runs as.
+
+Then the repository variable `DEPLOY_ENABLED` was created and set to `true` —
+it did not exist before; `server-ci.yml`'s `deploy` job had been gated on a
+variable nobody had ever set.
+
+**Verified by actually triggering a deploy, not by reading the config.**
+`workflow_dispatch` on `server-ci.yml` (run
+[45541805917](https://github.com/polbinsenthabyer/resibo/actions/runs/45541805917)):
+**Build and test — success; Deploy API to server — success**, the job that had
+always shown `skipped` before. The runner is confirmed `online` with labels
+`self-hosted,Linux,X64,resibo-deploy` via the GitHub API. After the run,
+`POST /api/admin/users/list` with a valid ADMIN token — which had **404**d
+before this deploy — returned **200** with real account data; the same call
+with no token returned the expected `401 E0401`. The admin-users feature
+(§5.1, §13) is live in production for the first time.
+
+**What this changes going forward:** every future push to `dev/resibo`
+touching `server/**` (or `docker-compose.yml` or either deploy script) now
+rebuilds and redeploys the API automatically, the same way the frontend has
+since 2026-11-24. The manual command above is still correct and is the
+documented fallback if the runner is ever offline, but it is no longer the
+procedure of record. Closes §12 #16.
 
 #### The nginx vhost
 
@@ -1973,8 +2004,10 @@ installed and never builds the frontend**, the same division gainsoclock uses.
 Direct `dev/resibo` pushes that touch `client/**`, the client deploy script, or
 the client workflow build and deploy through a dedicated
 `resibo-client-deploy` runner. `CLIENT_DEPLOY_ENABLED=true` gates only this
-workflow; the backend's `DEPLOY_ENABLED` remains unset. The first automatic
-run (`e1f80e4`) completed successfully.
+workflow; the backend has its own separate `DEPLOY_ENABLED` gate and its own
+`resibo-deploy` runner, both now also live (§7.3) — enabling one never
+enabled the other, and they still don't share anything. The first automatic
+client run (`e1f80e4`) completed successfully.
 By hand:
 
 ```sh
@@ -2023,11 +2056,9 @@ tunnel** — the seventh service on it — and a proxied
 
 #### Not done
 
-- **Backend CI deploy is still disabled.** Its `DEPLOY_ENABLED` variable is
-  unset, and no runner carries its `resibo-deploy` label. The client's new
-  runner has a separate `resibo-client-deploy` label and its own gate, so
-  enabling frontend delivery does not activate backend deployment. The
-  client's first automatic run passed. See §12 #22.
+- ~~Backend CI deploy is still disabled.~~ **Done 2026-11-25** — see §7.3's
+  *Backend CI deploy — live since 2026-11-25*. Both halves now deploy
+  automatically from their own independent gates.
 - **No prelive for the client.** `setup-client-server.sh prelive` and
   `deploy-client.sh … prelive` already work, but no hostname or tunnel rule
   exists for it (§12 #11).
@@ -2339,7 +2370,7 @@ What phase 8 does **not** yet include, so nobody reads the row as finished:
 | 13 | **How do local tests get a database?** Right now `mvnw verify` loads `.env.dev` and connects to the **shared production instance** (§5.3, §8.1 risk 5) | whether a careless test can reach real data; also the Testcontainers row in §5 | 2026-11-24 | **open, and no longer theoretical.** CI is isolated by its own throwaway container; a developer's machine is not. The "harmless while there are no entities" caveat expired on 2026-11-24 — there are three entities, three tables and real rows, so a local test run now points at live data. §5 already recommends Testcontainers; a local MariaDB container is the cheaper half-measure. This needed deciding before the first repository and did not get it. |
 | 14 | Narrow the `resibo` database account's host part from `%` (§5.3, §8.1 risk 2) | nothing — it is hardening, not a blocker | 2026-11-24 | open, deliberately not done. The privilege half of §8.1 risk 2 is closed; this is the connectivity half. Reaching the port at all requires LAN access, so it is the smaller remaining exposure. Narrowing it to the container gateway would also need the local developer's route considered — see #13. |
 | 15 | **Who owns the schema?** `ddl-auto: none` means Hibernate will never create a table, and there is no Flyway and no migration (§5, §5.3) | every environment that has to be set up from scratch | 2026-11-24 | **open, and overtaken by events.** "Decide the tool before the first entity" did not happen: three tables now exist — `product`, `user_role`, `user` — applied by hand from `sql/tables/` with the administrative account. The files are reviewable and idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT IGNORE`), which is the good half. The bad half: **nothing records which environment has which file**, nothing handles altering an existing table, and the apply order matters (`user_role` before `user`). Adopting Flyway now also means baselining the three tables that already exist. |
-| 16 | The CI `deploy` job is not documented (§7, §7.3, §11) | nothing technical — it is a documentation gap that can mislead a session | 2026-11-24 | open. `.github/workflows/ci.yml` declares a `deploy` job that runs `scripts/deploy.sh` on a self-hosted runner labelled `resibo-deploy`, with `APP_DIR=/opt/resibo`, `HOST_PORT=8083`, `APP_ENV=prod`. §7.3 describes only the manual path, and this document should not have two answers to "how does it deploy". Confirm whether the runner is registered and whether CI deploys are the intended path, then write the winner into §7.3 and a decision into §13. |
+| 16 | ~~The CI `deploy` job is not documented~~ (§7, §7.3, §11) | — | 2026-11-24 | **RESOLVED 2026-11-25.** The runner is registered (`resibo-deploy`, online) and `DEPLOY_ENABLED=true`; CI deploy is now the live, documented path — §7.3, §13. |
 | 17 | **Should `/api/auth/signup` stay public?** While it is, the first account on an empty system becomes ADMIN, and anyone can create an EMPLOYEE account (§5.4, §8.1 risk 6) | how every new environment is set up, and who can hold an account | 2026-11-24 | open, and the main exposure left after §5.4. The bootstrap window is closed in production because an admin exists, but the mechanism reopens for every new environment. Options: require an ADMIN token for signup and seed the first admin by SQL; keep it public behind an invite code; or leave it and accept that account creation is open. Pick one before a prelive exists or before the first `/api/employee/**` endpoint ships. |
 | 18 | **No token refresh, no logout, no revocation** (§5.4) | how long a stolen token is useful; whether a dismissed employee can be locked out mid-shift | 2026-11-24 | open. A token is valid for its full 8 hours and cannot be withdrawn — setting `is_active = 0` stops the next login, not the token already issued. §5's original recommendation was "short-lived access token + refresh", and only the first half was built. Shortening the expiry makes the problem smaller and the frontend's job harder; a refresh token or a deny-list makes it go away and costs real work. |
 | 19 | ~~CORS is open to all origins~~ (§5.4) | — | 2026-11-24 | **RESOLVED 2026-11-24.** The API now answers browser calls only from `https://resibo.polbinsenthabyer.uk`, `http://localhost:5173` and `http://127.0.0.1:5173`. Verified on the live API: those three get an `access-control-allow-origin`; `https://evil.example.com` and `http://localhost:3000` get **403 with no CORS headers**; requests carrying no `Origin` at all — Postman, curl, server-to-server — are unaffected at 200. Naming origins also turned `allowCredentials` on, which changes nothing today because the token travels in the `Authorization` header, not a cookie. |
@@ -2442,6 +2473,7 @@ trivia the next session cannot reuse.
 | 2026-11-25 | **Admin user management added at `/api/admin/users/**`** — create/update, list, get, activate, deactivate for both ADMIN and EMPLOYEE accounts, no hard delete (§5.1) | Owner's request: an admin-only surface to manage staff accounts, matching how an authenticated admin could already name a role during signup, but as a real management surface rather than buried in the public signup contract. Activation is a dedicated pair of endpoints rather than folded into `/set`, per the owner's explicit preference, so a profile edit can never silently flip it. No hard delete, because `user.is_active` already exists for exactly this and a user row is the kind of thing a future sales/audit record will reference. Two new safeguards — an admin cannot deactivate or demote their own account, and cannot deactivate or demote the last remaining active admin — exist because the first-signup bootstrap bug found during the 2026-11-25 scan already showed this kind of lockout is reachable; this feature must not add a second way to cause it. Implemented test-first: 29 Mockito unit tests in `UserServiceImplTest`, no Spring context and no database, mirroring `ProductServiceImplTest`'s style. | Owner, safeguards by Claude |
 | 2026-11-25 | Add an admin Users screen on the new API (§5.6) | The owner asked for a new sidebar section to handle accounts. Reuse the new ADMIN-only list/get/set/activate/deactivate routes rather than sending staff through public signup. Keep creation/editing in a popup like Products, offer role/status filters and pagination, and confirm deactivation. Do not offer hard delete or client-side substitutes for the backend lockout safeguards. The response currently carries only `userRoleId` with environment-dependent values, so leave role unchanged on edit unless selected and request a stable role-name response field before claiming role display. The local client still targets the deployed API, where these new routes are not yet deployed; avoid live writes and defer end-to-end verification. | Owner, implemented by Codex |
 | 2026-11-25 | Match the admin Users client to the reviewed server response (§5.6) | The server's `db3f3c9` validation and transaction fixes and `19be949` contract documentation preserve the endpoint and envelope shapes. The client already sends valid role filters, 100-character names, and omitted unchanged password/role fields. Remove the speculative `ManagedUser.role` field because the server actually returns only `userRoleId`. Show "Role unavailable" rather than silently leaving an empty role slot, and keep the edit selector explicitly unchanged until the admin chooses a role. Do not infer role from environment-dependent numeric IDs. | Owner, implemented by Codex |
+| 2026-11-25 | **Backend CI deploy enabled** — a second self-hosted runner (`resibo-deploy`, its own directory and systemd service, distinct from `resibo-client-deploy`) was registered and the `DEPLOY_ENABLED` repository variable created and set `true` (§7.3) | Owner's request, after discovering (via a live 404 on `/api/admin/users/list`) that the admin-users commits had reached GitHub but never reached the running container — the backend's deploy job had been declared since the monorepo split but never actually armed, unlike the client's. The runner was installed by hand rather than via `scripts/setup-server.sh`'s own runner step, because that script's `RUNNER_DIR` default collides with the already-running client runner's directory, and it separately still defaults `BRANCH` to the deleted `dev/api/resibo` — a pre-existing defect tracked in the vault `Tasks.md`, sidestepped here rather than fixed, since fixing a shared bootstrap script was out of scope for registering one runner. Verified by actually dispatching the workflow and watching the previously-`skipped` deploy job report `success`, then confirming the live API's behaviour changed from 404 to 200 for the exact request that had failed. | Owner, implemented by Claude |
 
 ---
 
@@ -2483,3 +2515,4 @@ trivia the next session cannot reuse.
 | 2026-11-25 | 0.32 | Added the `/admin/users` sidebar/workspace plan in §5.6 and §13, including create/edit, list/filter/page, activation, and the role-name response gap. Frontend lint/build/format/diff checks, local route HTTP, and independent review passed; commit waits for the backend's whole-branch review. Backend deployment is separate. | Codex |
 | 2026-11-25 | 0.33 | Aligned the Users response type and role display with the server's unchanged wire contract after its validation fixes; documented the remaining role-name API gap. Client lint/build/format/diff and local route checks passed; independent reviewer accepted; committed as `ade204c`. | Codex |
 | 2026-11-25 | 0.34 | Recorded the authorized push through `ade204c`, successful client Build and Deploy and server Build and Test, matching live client asset hashes, and skipped server deployment. The Users API still needs a separate backend deployment before browser/API interaction can be verified. | Codex |
+| 2026-11-25 | 0.35 | Registered the `resibo-deploy` self-hosted runner and set `DEPLOY_ENABLED=true`, closing §12 #16 — backend CI deploy is live, the same way the client's has been since 2026-11-24. Rewrote §7.1's "How we deploy" row, §7.3 with a new *Backend CI deploy — live since 2026-11-25* subsection, §7.4's description of the two independent gates, and the §7.3 "Not done" item. Verified by dispatching the workflow and watching the deploy job succeed, then confirming the previously-404ing admin-users API now returns real data for an authenticated ADMIN call. | Claude |
