@@ -209,13 +209,61 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional
     public ResponseDto activateUser(Long userId) {
-        throw new UnsupportedOperationException("not yet implemented — step group D");
+        if (userId == null) {
+            return ResponseUtility.getErrorResponse("E0001", MessageType.ERROR_DTO_IS_NULL_OR_INCOMPLETE);
+        }
+        User user = userUtility.findById(userId);
+        if (user == null) {
+            return ResponseUtility.getErrorResponse("E0201", MessageType.ERROR_USER_NOT_EXIST);
+        }
+        try {
+            user.setIsActive(Boolean.TRUE);
+            user.setUpdatedBy(securityUtil.currentUsername());
+            user.setUpdatedAt(new Date());
+            userRepository.save(user);
+            return ResponseUtility.getSuccessResponse(MessageType.SUCCESSFULLY_ACTIVATED_USER);
+        } catch (Exception e) {
+            log.error("activateUser failed for id={}", userId, e);
+            return ResponseUtility.getErrorResponse("E9999", MessageType.ERROR_SOMETHING_WENT_WRONG);
+        }
     }
 
     @Override
+    @Transactional
     public ResponseDto deactivateUser(Long userId) {
-        throw new UnsupportedOperationException("not yet implemented — step group D");
+        if (userId == null) {
+            return ResponseUtility.getErrorResponse("E0001", MessageType.ERROR_DTO_IS_NULL_OR_INCOMPLETE);
+        }
+        User user = userUtility.findById(userId);
+        if (user == null) {
+            return ResponseUtility.getErrorResponse("E0201", MessageType.ERROR_USER_NOT_EXIST);
+        }
+
+        String caller = securityUtil.currentUsername();
+        if (caller != null && caller.equalsIgnoreCase(user.getUsername())) {
+            return ResponseUtility.getErrorResponse("E0202", MessageType.ERROR_CANNOT_MODIFY_OWN_ACCOUNT);
+        }
+
+        UserRoleType role = userUtility.roleTypeOf(user);
+        if (role == UserRoleType.ADMIN && Boolean.TRUE.equals(user.getIsActive())) {
+            Long adminRoleId = userUtility.findRoleIdByRoleType(UserRoleType.ADMIN);
+            if (userRepository.countActiveUsersByRoleId(adminRoleId) <= 1) {
+                return ResponseUtility.getErrorResponse("E0203", MessageType.ERROR_LAST_ACTIVE_ADMIN);
+            }
+        }
+
+        try {
+            user.setIsActive(Boolean.FALSE);
+            user.setUpdatedBy(caller);
+            user.setUpdatedAt(new Date());
+            userRepository.save(user);
+            return ResponseUtility.getSuccessResponse(MessageType.SUCCESSFULLY_DEACTIVATED_USER);
+        } catch (Exception e) {
+            log.error("deactivateUser failed for id={}", userId, e);
+            return ResponseUtility.getErrorResponse("E9999", MessageType.ERROR_SOMETHING_WENT_WRONG);
+        }
     }
 
     private UserRoleType parseRole(String raw) {

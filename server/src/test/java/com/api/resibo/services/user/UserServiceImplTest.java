@@ -344,4 +344,117 @@ class UserServiceImplTest {
         assertThat(res.isSuccess()).isTrue();
         assertThat(res.getData()).isEqualTo(u);
     }
+
+    // --- activateUser / deactivateUser -------------------------------------
+
+    @Test
+    void activateUnknownIdReturnsNotExist() {
+        when(userUtility.findById(1L)).thenReturn(null);
+        assertThat(service.activateUser(1L).getCode()).isEqualTo("E0201");
+    }
+
+    @Test
+    void activateExistingSetsActiveTrueAndTouchesOnlyAuditFields() {
+        User u = new User();
+        u.setId(3L);
+        u.setIsActive(false);
+        u.setPassword("UNCHANGED_HASH");
+        u.setUserRoleId(2L);
+        when(userUtility.findById(3L)).thenReturn(u);
+        when(securityUtil.currentUsername()).thenReturn("polbinsent");
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        assertThat(service.activateUser(3L).isSuccess()).isTrue();
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertThat(saved.getValue().getIsActive()).isTrue();
+        assertThat(saved.getValue().getPassword()).isEqualTo("UNCHANGED_HASH");
+        assertThat(saved.getValue().getUserRoleId()).isEqualTo(2L);
+    }
+
+    @Test
+    void deactivateUnknownIdReturnsNotExist() {
+        when(userUtility.findById(1L)).thenReturn(null);
+        assertThat(service.deactivateUser(1L).getCode()).isEqualTo("E0201");
+    }
+
+    @Test
+    void deactivateRejectsSelf() {
+        User self = new User();
+        self.setId(1L);
+        self.setUsername("polbinsent");
+        self.setIsActive(true);
+        when(userUtility.findById(1L)).thenReturn(self);
+        when(securityUtil.currentUsername()).thenReturn("polbinsent");
+
+        assertThat(service.deactivateUser(1L).getCode()).isEqualTo("E0202");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void deactivateRejectsSelfCaseInsensitively() {
+        // The JWT claim and the stored username could differ only in case —
+        // the self-check must not be fooled by that, any more than the
+        // uniqueness check is.
+        User self = new User();
+        self.setId(1L);
+        self.setUsername("polbinsent");
+        self.setIsActive(true);
+        when(userUtility.findById(1L)).thenReturn(self);
+        when(securityUtil.currentUsername()).thenReturn("POLBINSENT");
+
+        assertThat(service.deactivateUser(1L).getCode()).isEqualTo("E0202");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void deactivateRejectsTheLastActiveAdmin() {
+        User target = new User();
+        target.setId(2L);
+        target.setUsername("other-admin");
+        target.setIsActive(true);
+        when(userUtility.findById(2L)).thenReturn(target);
+        when(securityUtil.currentUsername()).thenReturn("polbinsent");
+        when(userUtility.roleTypeOf(target)).thenReturn(UserRoleType.ADMIN);
+        when(userUtility.findRoleIdByRoleType(UserRoleType.ADMIN)).thenReturn(1L);
+        when(userRepository.countActiveUsersByRoleId(1L)).thenReturn(1L);
+
+        assertThat(service.deactivateUser(2L).getCode()).isEqualTo("E0203");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void deactivateNeverChecksAdminCountForAnEmployee() {
+        User employee = new User();
+        employee.setId(4L);
+        employee.setUsername("staffer");
+        employee.setIsActive(true);
+        when(userUtility.findById(4L)).thenReturn(employee);
+        when(securityUtil.currentUsername()).thenReturn("polbinsent");
+        when(userUtility.roleTypeOf(employee)).thenReturn(UserRoleType.EMPLOYEE);
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        assertThat(service.deactivateUser(4L).isSuccess()).isTrue();
+        verify(userRepository, never()).countActiveUsersByRoleId(any());
+    }
+
+    @Test
+    void deactivateAllowsWhenAnotherActiveAdminExists() {
+        User target = new User();
+        target.setId(2L);
+        target.setUsername("other-admin");
+        target.setIsActive(true);
+        when(userUtility.findById(2L)).thenReturn(target);
+        when(securityUtil.currentUsername()).thenReturn("polbinsent");
+        when(userUtility.roleTypeOf(target)).thenReturn(UserRoleType.ADMIN);
+        when(userUtility.findRoleIdByRoleType(UserRoleType.ADMIN)).thenReturn(1L);
+        when(userRepository.countActiveUsersByRoleId(1L)).thenReturn(2L);
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        assertThat(service.deactivateUser(2L).isSuccess()).isTrue();
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertThat(saved.getValue().getIsActive()).isFalse();
+    }
 }
