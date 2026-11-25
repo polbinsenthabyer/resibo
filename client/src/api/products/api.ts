@@ -17,11 +17,10 @@ export const productApi = {
 
   /** `{}` is a valid request and returns the first page unfiltered. */
   list(request: ProductListRequest = {}, signal?: AbortSignal): Promise<PageDto<Product>> {
-    return http.post<PageDto<Product>>(
-      endpoints.adminProducts.list,
-      request,
-      signal ? { signal } : {},
-    )
+    return http.post<PageDto<Product>>(endpoints.adminProducts.list, request, {
+      feedback: 'errors',
+      ...(signal ? { signal } : {}),
+    })
   },
 
   getById(productId: number, signal?: AbortSignal): Promise<Product> {

@@ -1,0 +1,135 @@
+.workspace {
+  display: grid;
+  grid-template-columns: 15.5rem minmax(0, 1fr);
+  min-height: calc(100vh - 4.5rem);
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  height: calc(100vh - 4.5rem);
+  min-height: 26rem;
+  padding: var(--space-8) var(--space-4);
+  overflow-y: auto;
+  border-right: var(--border-width) solid var(--color-border);
+  background: var(--color-surface-raised);
+}
+
+.sidebarTop {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.eyebrow {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sidebarTitle {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+
+.menuContent {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.nav {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid transparent;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--color-text);
+  text-decoration: none;
+
+  @include focus-ring;
+
+  &:hover {
+    background: var(--color-surface);
+  }
+}
+
+.active {
+  background: var(--color-surface);
+  border-left-color: var(--color-accent);
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.signOut {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+.content {
+  min-width: 0;
+  width: 100%;
+  max-width: 80rem;
+  margin-inline: auto;
+  padding: var(--space-8);
+}
+
+@media (max-width: $breakpoint-md) {
+  .workspace {
+    grid-template-columns: 12rem minmax(0, 1fr);
+  }
+
+  .content {
+    padding: var(--space-6);
+  }
+}
+
+@media (max-width: $breakpoint-sm) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    min-height: 0;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border-right: 0;
+    border-bottom: var(--border-width) solid var(--color-border);
+  }
+
+  .sidebarTop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .menuContent {
+    gap: var(--space-3);
+  }
+
+  .nav {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .signOut {
+    margin-top: 0;
+  }
+
+  .content {
+    padding: var(--space-4);
+  }
+}

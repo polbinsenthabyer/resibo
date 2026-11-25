@@ -7,10 +7,10 @@
  */
 
 /**
- * The production bundle uses the deployed API. Local development uses the
- * `/api` Vite proxy instead, so it does not call the public API by default.
- * This is not database isolation: the local backend may still use the shared
- * live database. Set VITE_API_BASE_URL explicitly for another target.
+ * Both production and local development use the deployed API by default.
+ * The owner explicitly chose this for local preview. Signup can write to the
+ * live service, so the development signup page warns before submission.
+ * Set VITE_API_BASE_URL=/api to use the local Vite proxy instead.
  */
 const DEPLOYED_API_BASE_URL = 'https://resibo-api.polbinsenthabyer.uk/api'
 
@@ -23,11 +23,10 @@ const DEPLOYED_API_BASE_URL = 'https://resibo-api.polbinsenthabyer.uk/api'
  *   VITE_API_BASE_URL=/api
  *
  * which is a same-origin relative path — `vite.config.ts` proxies `/api` to a
- * local backend on :8083 in development. The production site serves the API
- * from its separate hostname, so the deployed URL remains its default.
+ * local backend on :8083 in development. The deployed URL is the default in
+ * both dev and production builds.
  */
-const defaultApiBaseUrl = import.meta.env.DEV ? '/api' : DEPLOYED_API_BASE_URL
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? defaultApiBaseUrl).replace(/\/+$/, '')
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? DEPLOYED_API_BASE_URL).replace(/\/+$/, '')
 
 export const env = {
   apiBaseUrl,

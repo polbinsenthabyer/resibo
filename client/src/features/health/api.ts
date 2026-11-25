@@ -15,6 +15,7 @@ export const healthApi = {
   async check(signal?: AbortSignal): Promise<void> {
     await http.get<null>(endpoints.health.check, {
       authenticated: false,
+      feedback: 'none',
       ...(signal ? { signal } : {}),
     })
   },

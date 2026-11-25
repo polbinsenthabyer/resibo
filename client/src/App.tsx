@@ -1,6 +1,7 @@
 import { RouterProvider } from 'react-router-dom'
 
 import { router } from '@/app/router'
+import { NotificationCenter } from '@/components/feedback/NotificationCenter'
 
 /**
  * Application root. The place where app-wide providers are composed —
@@ -9,5 +10,10 @@ import { router } from '@/app/router'
  * refactor of a page.
  */
 export function App() {
-  return <RouterProvider router={router} />
+  return (
+    <>
+      <RouterProvider router={router} />
+      <NotificationCenter />
+    </>
+  )
 }

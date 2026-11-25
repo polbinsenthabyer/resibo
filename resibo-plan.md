@@ -5,7 +5,7 @@
 > disagree, one of them is a bug: either the code drifted, or this file went
 > stale and must be corrected in the same change that revealed it.
 
-**Status: planning, with a deployed API and React client with auth and placeholder role pages.** A Spring Boot application runs on the server in Docker behind the
+**Status: planning, with a deployed API and React client with auth, an admin catalog, and an employee placeholder.** A Spring Boot application runs on the server in Docker behind the
 host's nginx, fronted by the Cloudflare tunnel that already serves the sibling
 projects, answering on `https://resibo-api.polbinsenthabyer.uk` (§7.3). It
 connects to MariaDB as a dedicated least-privilege account, with Hibernate
@@ -15,7 +15,7 @@ catalog.
 
 **Read that narrowly.** What exists is a way to log in and a list of products.
 There is no checkout, no sale, no receipt, no payment, no shift, no stock
-movement; the client has login, signup, health, and role welcome pages but no POS workflow. **Every `[BLOCKER]` item below is
+movement; the client has login, signup, health, admin product management, and an employee welcome page but no POS workflow. **Every `[BLOCKER]` item below is
 still unanswered, and nothing that depends on one should be written until it
 is.** The two roles are a working minimum, not the answer to §1.3. The
 `product` table is a name, a price and a stock count, not the §4 domain model.
@@ -66,10 +66,10 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.21 — role welcome and theme deployment verified; scope still unfilled |
+| Document version | 0.27 — Magnific admin and theme icons; scope still unfilled |
 | Created | 2026-11-24 |
-| Last updated | 2026-11-24 |
-| Last updated by | Codex (frontend role routing, sign-out, and theme) |
+| Last updated | 2026-11-25 |
+| Last updated by | Codex (admin and theme icon controls) |
 | Plan status | **AWAITING OWNER INPUT** — the API is deployed and authenticated (§5.4, §7.3), and the React client is now deployed too, at `https://resibo.polbinsenthabyer.uk` (§5.6, §7.4). There is still no checkout, no sale and no receipt, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
 | Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` on `dev/resibo`. A second clone at `%USERPROFILE%\sprintify_solutions\personal\app\resibo` is a duplicate; do not edit it until its fate is decided. |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
@@ -395,7 +395,7 @@ a choice has been made in code, and says **open** where nothing has been chosen.
 | Password hashing | BCrypt | **BCrypt — in use** (§5.4), `BCryptPasswordEncoder` at its default strength. The `password` column holds a hash and never a plaintext password. |
 | Frontend build | Vite | **Vite 8 — in use** (§5.6), at `src/main/client` on branch `dev/app/resibo`. |
 | Frontend language | TypeScript | **TypeScript 7 — in use**, with `strict`, `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` (§5.6). |
-| Server state | TanStack Query | **Open, and deliberately not adopted.** The client has a small `useAsync` hook instead — no cache, no deduplication, no revalidation. That is the right size for one health call and the wrong size for a catalog; adopt TanStack Query when a screen needs it rather than growing the hook. |
+| Server state | TanStack Query | **Open, and deliberately not adopted.** The client uses the small `useAsync` hook for health and admin catalog reads; it has no cache, deduplication, or automatic revalidation. Revisit TanStack Query if catalog interactions become more complex rather than growing the hook. |
 | UI components | shadcn/ui on Tailwind | **Diverged from the recommendation, by the owner’s choice: plain SCSS.** Design tokens as CSS custom properties, a small reset, one CSS Module per component (§5.6). No Tailwind and no component library. A kit could still be added, but it would sit on top of this rather than replace it. |
 | Routing | React Router | **React Router 7 — in use** (§5.6), one route table at `src/app/router.tsx`. |
 | Backend tests | JUnit 5 + Testcontainers against real MariaDB | **JUnit 5 in use** (`spring-boot-starter-webmvc-test`, `spring-boot-starter-actuator-test`, `spring-boot-starter-data-jpa-test`, `spring-boot-starter-security-test`), **22 tests** as of 2026-11-24. **Testcontainers still open — and it stopped being academic**: the context test now needs a datasource, CI supplies a throwaway one (§5.3), but a local `mvnw verify` loads `.env.dev` and therefore connects to the **shared production database**, which now has real rows in it. §12 #13. |
@@ -1083,12 +1083,62 @@ so the filters cannot be used to inject SQL.
 A React application scaffolded with Vite, now living at **`client/`** on the
 single **`dev/resibo`** branch. It renders, builds, type-checks and lints, is
 deployed as static files (§7.4), and has a health page plus public login and
-signup forms wired to `AuthController`, plus placeholder ADMIN and EMPLOYEE
-pages. **It is not a POS screen.**
+signup forms wired to `AuthController`, an ADMIN workspace with product CRUD,
+and a placeholder EMPLOYEE page. **It is not a POS screen.**
 
 The health page includes a locally bundled SpongeBob dancing GIF as a visible
 client pipeline test (2026-11-24). It changes no API behavior. Remove the
 test image when this page becomes a product screen.
+
+**Brand assets (2026-11-25).** The owner chose Magnific for new Resibo logos,
+icons, illustrations, and other original graphics. Save generated work in the
+Magnific `pol` project. The first receipt-shaped R was rejected after preview
+as too generic. Its replacement is a blue printed receipt with a warm apricot
+forward arrow, connecting the POS transaction to the receipt. The selected
+Magnific PNG and traced SVG are kept in `client/design/magnific/`; the cropped,
+web-ready `client/public/resibo-logo.svg` supplies both header and favicon.
+The SVG adapts its blue to dark browser themes. The name remains text for
+legibility. The older SpongeBob GIF is a temporary pipeline test that predates
+this asset direction.
+
+The admin side menu and admin action controls now use a matching Magnific SVG
+icon set from `pol`; the light/dark theme control uses a Magnific sun/moon
+pair. The original exports are in `client/design/magnific/`, with web copies
+under `client/public/icons/` and source links in the design directory's
+README. The 13 new SVGs cost 4,875 Magnific credits. The side menu keeps text
+labels beside its icons; action buttons use icons with accessible names and
+hover titles. The requested collapsible menu was subsequently withdrawn, so
+the menu remains visible at the far left on desktop and stacks on narrow screens.
+
+**UI labels (2026-11-25).** Login and signup no longer print the API target;
+it remains in the client configuration and development documentation. The
+header no longer adds a "point of sale" tagline beside the logo and Resibo
+name. Signup retains its development warning because the local backend still
+uses the shared live database.
+
+**Backend feedback (2026-11-25).** One app-wide popup stack presents backend
+success and error messages from `ResponseDto`. The HTTP layer handles business
+errors even when they arrive as HTTP 200. Mutations show success and error;
+reads show error only, and the read-only product-list POST opts out of success.
+The automatic health check keeps its inline diagnostic status instead of
+showing a popup on load. Login waits until its token has been saved and checked
+before showing success. Local form validation failures use the same popup.
+The stack shows at most three notices to preserve room for the page; success
+notices dismiss after six seconds, errors stay until dismissed or displaced by
+newer notices. No API contract or backend file changes are required.
+
+**Admin workspace (2026-11-25).** `/admin` now has a responsive far-left side
+menu, a simple overview with the existing catalog count, and a Products route
+at `/admin/products`. The products screen lists, searches, and pages through
+items; an inline form creates and edits them, and deletion requires explicit
+confirmation. It uses the server's existing ADMIN-only set/list/get/delete
+routes through the shared `client/src/api/products/` module. Updates send all
+editable fields because the server resets omitted price and stock to zero.
+The client checks the server's name, description, price, and stock limits
+before save, shows backend feedback through the shared popup, and offers
+session-ended or access-denied guidance for 401/403 reads. Prices are shown
+with two decimal places but without an assumed currency or client totals.
+No sales, receipts, or permission beyond the existing ADMIN route are invented.
 
 | Field | Value |
 |---|---|
@@ -1100,7 +1150,7 @@ test image when this page becomes a product screen.
 | Styling | plain **SCSS** (`sass` 1.108) — tokens as CSS custom properties, one CSS Module per component |
 | Routing | **React Router 7.18**, one route table at `src/app/router.tsx` |
 | Linting / formatting | **oxlint** 1.95 — create-vite's default now, not ESLint — and **Prettier** 3.10 |
-| Dev server | `localhost:5173`. Defaults to `/api`, proxied to a local backend on `localhost:8083`. `VITE_API_BASE_URL` can name another target explicitly. The production bundle defaults to the deployed API. **The local backend currently uses the shared live database, so the proxy alone does not isolate account writes.** |
+| Dev server | `localhost:5173`. Defaults to the deployed API, as does the production bundle. `VITE_API_BASE_URL=/api` opts into the proxy to a local backend on `localhost:8083`. **Either target can write to the live database; the local backend currently uses the shared live schema too.** |
 | Added to the template | `react-router-dom`; dev-only `sass` and `prettier`. Nothing else. |
 
 #### Where it lives, and why that was a decision
@@ -1119,7 +1169,7 @@ Feature-first, with shared layers underneath:
 ```
 client/src/
 ├── main.tsx              entry: mounts App, loads the one global stylesheet
-├── App.tsx               app-wide providers (router today)
+├── App.tsx               app-wide router and popup notification center
 ├── app/                  routing — route table and path constants
 ├── api/                  the HTTP layer; the only place that calls fetch
 ├── features/<name>/      a feature owns its api, types, hooks, components, pages
@@ -1150,6 +1200,10 @@ this API's contract needs translating in exactly one place:
   difference matters. A caller never sees the envelope and never branches on a
   status code.
 
+The same layer publishes the envelope's `message` to the shared popup center
+according to the request's feedback policy. It rejects malformed envelopes
+and uses a generic error message when a valid error envelope has blank text.
+
 `src/api/types.ts` mirrors `ResponseDto` and `PageDto` field for field, and
 flags the two envelope fields that are defects rather than features:
 `responseTime` is UTC (§12 #8), and `className` / `methodName` are internal
@@ -1157,31 +1211,31 @@ detail on a public response (§12 #10).
 
 #### Which API it talks to
 
-The **production build** defaults to
-`https://resibo-api.polbinsenthabyer.uk/api`. **Local Vite development** now
-defaults to `/api`, proxied to `localhost:8083`. `VITE_API_BASE_URL` overrides
-either default. This supersedes the earlier development default in §13: the
-owner originally chose a live API default while the client could only read
-health, but signup can create an account.
+Both the **production build** and **local Vite development** default to
+`https://resibo-api.polbinsenthabyer.uk/api`, at the owner's explicit request
+on 2026-11-25. `VITE_API_BASE_URL=/api` opts into the proxy to
+`localhost:8083`; other explicit URLs also override the default. This
+supersedes the temporary local-proxy default introduced with the auth forms.
 
 ⚠️ **The proxy is not database isolation.** `server/.env.dev` currently points
 at the same live schema as production (§12 #13), so a local backend can still
-create real accounts. The signup page warns about this in development. Both
-auth pages print their effective API target, and no account is created just
-to verify the frontend. A truly isolated local signup needs a separate
-database, which remains backend work.
+create real accounts. The default deployed API can also create live accounts.
+The signup page warns about this in development. The auth pages do not display
+the API target, and no account is created just to verify the frontend. A truly
+isolated local signup needs a separate database, which remains backend work.
 
 The deployed API's CORS allow-list includes the live client and both Vite
-localhost origins (§5.4). An explicit live API override in development can
-therefore work, but it must be intentional.
+localhost origins (§5.4), so the local default can call it. The `/api` proxy
+is the intentional opt-in to a local backend. Preview on a loopback URL;
+other LAN origins are not in that CORS list.
 
 #### Role landing, sign-out, and appearance
 
 Successful login saves the JWT in `localStorage` and redirects the returned
-ADMIN role to `/admin` or EMPLOYEE role to `/employee`. The pages display
-"Welcome Admin to RESIBO POS" or "Welcome Employee to RESIBO POS" and a
-Sign out button. Sign out removes the stored token and replaces the route with
-`/login`. On reload, client routing decodes the stored JWT role and expiry;
+ADMIN role to `/admin` or EMPLOYEE role to `/employee`. ADMIN opens the catalog
+workspace; EMPLOYEE still sees a welcome placeholder. Both can sign out.
+Sign out removes the stored token and replaces the route with `/login`.
+On reload, client routing decodes the stored JWT role and expiry;
 missing, malformed, or expired tokens go to login, and a wrong-role URL goes to
 the stored role's page. This is a navigation aid only: the browser does not
 verify the signature, and the backend remains the authority for protected
@@ -1196,17 +1250,17 @@ browser-based visual check or successful login submission is claimed here.
 
 #### Deliberately not built
 
-- **No protected product screen.** The role destinations are plain placeholders;
-  signup confirms account creation without signing in. The permission
-  decisions for ADMIN and EMPLOYEE remain open in §1.3.
+- **No checkout, sales, receipt, or employee workflow.** The employee route is
+  still a placeholder. Signup confirms account creation without signing in;
+  the broader permission decisions in §1.3 remain open.
 - **No money or date formatting.** Currency, date format and timezone are blank
   in §10, and `responseTime` serialises in UTC. A formatter would have had to
-  guess, and a POS prints those values on receipts — so `features/products`
+  guess, and a POS prints those values on receipts — so `api/products`
   documents that totals must not be computed client-side instead of shipping a
   helper that quietly does it.
 - **No tests and no test runner.** §5 proposes Vitest; nothing is installed.
-- **No state or data-fetching library.** A small `useAsync` hook covers one
-  health call.
+- **No state or data-fetching library.** A small `useAsync` hook covers health
+  and current catalog reads without caching.
 - **No isolated local auth database.** The local backend still reaches the
   shared live schema (§12 #13); the frontend cannot fix that boundary.
 
@@ -1218,7 +1272,7 @@ browser-based visual check or successful login submission is claimed here.
 | `npm run lint` (oxlint) | **clean**, no warnings |
 | `npx prettier --check` | clean |
 | `./mvnw -B clean compile` after the client landed | **BUILD SUCCESS**, 32 sources, `src/main/client` untouched |
-| The deployed API | Previously verified by `curl`: `GET /api/health/check` returns 200 and the local Vite origin is allowed by CORS. This is the production build target, not the local development default. |
+| The deployed API | `GET /api/health/check` returned 200 on 2026-11-25. It is the default for production and local development. Verify CORS from the local Vite origin when testing in a browser. |
 | Auth page deployment (`6187e06`) | [Client run 45369269628](https://github.com/polbinsenthabyer/resibo/actions/runs/45369269628) passed Build and Deploy. Public `/login` and `/signup` returned `200 text/html` and loaded the new JS bundle. Live JS and CSS SHA-256 hashes matched the local production build; the CSS contains two narrow-screen media blocks. API health stayed 200. |
 | Safe auth-controller rejection checks | A bogus login returned `ERROR/E0106`; a signup request with a blank username returned `ERROR/E0101`. No account was created. These verify the live endpoints and error envelope, not the rendered forms. |
 | Login and signup in a browser | **Not visually verified or submitted through a browser.** The page bundle and responsive CSS were verified by HTTP and hash comparison; no real account was created to exercise signup success. |
@@ -1558,10 +1612,11 @@ caller — and it is the thing the two-branch layout made impossible.
 Which pipeline runs is decided by the path filters in §7.4, not by where
 the commit sits.
 
-On disk there is one checkout, `personal/app/resibo`. ⚠️ A second clone at
-`personal/resibo` still exists on the retired `dev/api/resibo` and should
-be deleted or re-pointed — two trees for one branch is how the last
-divergence started.
+**Current checkout correction (2026-11-25):** Work in `personal/resibo` on
+`dev/resibo`. `personal/app/resibo` is the duplicate, even if its source has
+been fast-forwarded to the same commit; its ignored `client/dist` is stale.
+Do not delete or edit the primary checkout. The branch-split discussion below
+is historical and no longer directs current work.
 
 Because `dev/app/resibo` was cut *from* `dev/api/resibo` rather than from
 `main`, it carries a complete copy of the backend, this plan and `CLAUDE.md`.
@@ -2319,6 +2374,12 @@ trivia the next session cannot reuse.
 | 2026-11-24 | Give client deployment its own runner label and repository variable (§7.4) | The owner wants every frontend push to build and reach the live site. A shared `DEPLOY_ENABLED` flag would also arm the backend deploy job, which was not requested. `CLIENT_DEPLOY_ENABLED` and `resibo-client-deploy` keep the frontend path independent while the backend gate remains closed. The deploy script retains old hashed assets so an in-flight page does not break during the swap. | Owner, implemented by Codex |
 | 2026-11-24 | Add responsive login and signup pages using the existing auth client; switch the Vite development default to `/api` (§5.6) | The owner requested the two controller flows and made responsive design a standing frontend requirement. Anonymous signup has no meaningful role choice after the first account, so the form omits role; signup does not sign the caller in because the API returns no token. The earlier live development default was chosen for a read-only health page. A write-capable page makes a direct production default too easy to misuse. The local backend still uses the shared live database, so the form warns and the proxy is not presented as data isolation. Production keeps its deployed API default. | Owner, implemented by Codex |
 | 2026-11-24 | Add role welcome routes, local sign-out, remove header page links, and persist light/dark choice (§5.6) | The owner requested a distinct destination for each login role, a Sign out button that clears the locally stored token, a header without page navigation, and dark/light mode. Decode role and expiry only for client navigation; the server must still validate JWT signatures for protected data. Keep `/status` reachable by URL for pipeline diagnostics. Store theme separately so sign-out does not reset the user's appearance preference. | Owner, implemented by Codex |
+| 2026-11-25 | Generate Resibo visual assets with Magnific, starting with the logo and favicon (§5.6) | The owner chose Magnific as the standing source for future logos, icons, and original graphics. The initial receipt-shaped R was rejected in preview as too generic. The revised printed receipt and forward arrow make the POS and receipt connection visible without assuming a retail vertical. One web SVG supplies the header and favicon; Magnific originals are retained for provenance. | Owner, implemented by Codex |
+| 2026-11-25 | Show backend success and errors in a shared popup (§5.6) | The owner requested a general popup for backend messages. Publishing in the sole HTTP layer covers business errors returned with HTTP 200 and avoids per-page duplication. Reads suppress success noise, while the product-list POST and automatic health check opt out of irrelevant popups. Login success waits for token validation so a failed local session is never announced as successful. A bounded stack prevents notices from covering the page. | Owner, implemented by Codex |
+| 2026-11-25 | Remove API target labels from auth forms and the POS tagline from the header (§5.6) | The owner asked for cleaner login/signup forms and branding. These labels are diagnostic and descriptive rather than needed for the user's immediate task. Keep the signup development warning because the local backend still writes to the shared live database; document the target in developer files instead. | Owner, implemented by Codex |
+| 2026-11-25 | Default the locally running client to the deployed API (§5.6) | The owner explicitly wants the local app to call `resibo-api.polbinsenthabyer.uk` rather than a local backend. This restores the original frontend-alone development behavior while auth writes exist, so signup keeps a clear development warning. `VITE_API_BASE_URL=/api` still offers an intentional local-backend override, whose database is presently shared with production anyway. No backend configuration changes are required. | Owner, implemented by Codex |
+| 2026-11-25 | Build a simple ADMIN workspace on the existing product CRUD API (§5.6) | The owner requested a clean landing page, sidebar, and product management. The backend already implements all four ADMIN product routes, so no server edit or new contract is necessary. A text-only side menu avoids introducing ungenerated icons under the Magnific asset rule. The overview shows only the catalog count available from the API; it does not invent sales metrics. The product UI sends complete update payloads, validates known backend limits, confirms deletes, and handles 401/403 explicitly. Keep the employee placeholder and do not guess the broader POS or permission model. | Owner, implemented by Codex |
+| 2026-11-25 | Keep the admin menu visible and use Magnific icons for sections, actions, and theme (§5.6) | The owner withdrew the requested collapse control and asked for appropriate icons in sidebar sections and icon-only action buttons, including the light/dark control. Generate the icon set in the existing Magnific `pol` project under the standing asset-source rule. Keep visible text beside section icons for orientation, and give each icon-only button an accessible name and title. Reuse Close for clear/cancel and mirror Previous for Next to limit asset count. Keep the menu at the far-left desktop edge and stack it above content on narrow screens. This supersedes the text-only sidebar choice in the preceding decision. | Owner, implemented by Codex |
 
 ---
 
@@ -2347,3 +2408,9 @@ trivia the next session cannot reuse.
 | 2026-11-24 | 0.19 | Recorded client CI Build and Deploy success for `6187e06`, live auth route and bundle hash checks, narrow-screen CSS presence, safe API error responses, and the unverified browser submission limit. | Codex |
 | 2026-11-24 | 0.20 | Added role-based placeholder routes, local token clearing on sign-out, root redirect, status-page relocation, header without page links, and persistent light/dark mode to §5.6; recorded the client/server trust boundary and responsive intent. Deployment verification will be appended after CI. | Codex |
 | 2026-11-24 | 0.21 | Recorded local lint/build/format success, client CI Build and Deploy success for `4b99b08`, public route and bundle hash checks, dark theme/mobile CSS presence, and the browser verification limit. | Codex |
+| 2026-11-25 | 0.22 | Recorded the Magnific asset-source rule in §5.6 and §13; added the generated Resibo mark to the header and favicon. Local preview and verification are pending owner review; changes remain uncommitted at the owner's request. | Codex |
+| 2026-11-25 | 0.23 | Replaced the rejected first mark with the Magnific receipt-and-arrow concept in §5.6; added the shared popup feedback policy and its reasoning in §5.6/§13. Corrected §7.1's reversed clone instruction. All work remains local pending owner preview. | Codex |
+| 2026-11-25 | 0.24 | Removed the auth forms' API target text and the header's "point of sale" tagline; updated §5.6 and §13 while keeping the signup development warning. Local and uncommitted pending preview. | Codex |
+| 2026-11-25 | 0.25 | Switched local Vite's default API target to the deployed API at the owner's request; retained opt-in `/api` proxy and the signup warning. Updated §5.6, §13, and client config documentation. Local and uncommitted pending preview. | Codex |
+| 2026-11-25 | 0.26 | Added the ADMIN sidebar, overview, and product list/create/edit/delete flow in §5.6 using existing server endpoints; recorded validation, confirmation, 401/403 handling, and why no backend change or new metrics were added. Local and uncommitted pending preview. | Codex |
+| 2026-11-25 | 0.27 | Recorded 13 Magnific-generated sidebar, admin action, and theme SVG icons, their source and cost, and the non-collapsible far-left menu in §5.6/§13. All edits are local; the owner now requests local commits with no push until instructed. | Codex |

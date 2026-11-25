@@ -66,9 +66,9 @@ was meant to let the two halves move independently and did not deliver that —
 it delivered two copies of the plan, both numbered 0.8, in a single day.
 Independence comes from the CI path filters, not the branch. Plan §7.1, §7.4.
 
-> ⚠️ **One branch, one checkout.** A second clone may still exist at
-> `personal/resibo` on the retired `dev/api/resibo`. Delete or re-point it —
-> two trees for one project is how the last divergence started.
+> ⚠️ **Use the primary checkout.** Work in `personal/resibo` on `dev/resibo`.
+> `personal/app/resibo` is the duplicate; its ignored client build is stale.
+> Do not edit or delete the primary checkout. Settle the duplicate separately.
 
 ## Layout
 

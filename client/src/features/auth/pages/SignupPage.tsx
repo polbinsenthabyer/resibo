@@ -3,9 +3,11 @@ import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 
 import { paths } from '@/app/paths'
+import { ApiError, NetworkError } from '@/api/errors'
 import { StatusMessage } from '@/components/feedback/StatusMessage'
 import { Button } from '@/components/ui/Button'
 import { env } from '@/config/env'
+import { notify } from '@/lib/notifications'
 
 import { authApi } from '../api'
 
@@ -17,16 +19,14 @@ export function SignupPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<Error | null>(null)
   const [created, setCreated] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (isSubmitting) return
 
-    setError(null)
     if (password !== confirmPassword) {
-      setError(new Error('Passwords do not match.'))
+      notify.error('Passwords do not match.')
       return
     }
 
@@ -42,11 +42,13 @@ export function SignupPage() {
       setPassword('')
       setConfirmPassword('')
     } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? cause
-          : new Error('Could not create the account. Please try again.'),
-      )
+      if (!(cause instanceof ApiError) && !(cause instanceof NetworkError)) {
+        notify.error(
+          cause instanceof Error
+            ? cause.message
+            : 'Could not create the account. Please try again.',
+        )
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -143,12 +145,6 @@ export function SignupPage() {
             />
           </div>
 
-          {error && (
-            <StatusMessage tone="failure" error={error}>
-              {error.message}
-            </StatusMessage>
-          )}
-
           <Button type="submit" variant="primary" disabled={isSubmitting}>
             {isSubmitting ? 'Creating account…' : 'Sign up'}
           </Button>
@@ -160,9 +156,6 @@ export function SignupPage() {
           Already have an account? <Link to={paths.login}>Log in</Link>
         </p>
       )}
-      <p className={styles.apiTarget}>
-        API target: <code>{env.apiBaseUrl}</code>
-      </p>
     </section>
   )
 }

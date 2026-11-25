@@ -3,9 +3,10 @@ import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { paths } from '@/app/paths'
+import { ApiError, NetworkError } from '@/api/errors'
 import { StatusMessage } from '@/components/feedback/StatusMessage'
 import { Button } from '@/components/ui/Button'
-import { env } from '@/config/env'
+import { notify } from '@/lib/notifications'
 
 import { authApi } from '../api'
 import { getStoredRole } from '../session'
@@ -18,7 +19,6 @@ export function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<Error | null>(null)
   const [savedRole, setSavedRole] = useState<UserRole | null>(() => getStoredRole())
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -26,18 +26,17 @@ export function LoginPage() {
     if (isSubmitting) return
 
     setIsSubmitting(true)
-    setError(null)
 
     try {
       const result = await authApi.login({ username: username.trim(), password })
-      if (getStoredRole() !== result.role) {
-        authApi.logout()
-        throw new Error('The login token could not be used. Please try again.')
-      }
       setPassword('')
       navigate(result.role === 'ADMIN' ? paths.admin : paths.employee, { replace: true })
     } catch (cause) {
-      setError(cause instanceof Error ? cause : new Error('Could not sign in. Please try again.'))
+      if (!(cause instanceof ApiError) && !(cause instanceof NetworkError)) {
+        notify.error(
+          cause instanceof Error ? cause.message : 'Could not sign in. Please try again.',
+        )
+      }
     } finally {
       setIsSubmitting(false)
     }
@@ -46,7 +45,6 @@ export function LoginPage() {
   function handleSignOut() {
     authApi.logout()
     setSavedRole(null)
-    setError(null)
   }
 
   return (
@@ -90,11 +88,6 @@ export function LoginPage() {
           />
         </div>
 
-        {error && (
-          <StatusMessage tone="failure" error={error}>
-            {error.message}
-          </StatusMessage>
-        )}
         {savedRole && (
           <StatusMessage tone="pending">
             A session is saved on this device.{' '}
@@ -119,9 +112,6 @@ export function LoginPage() {
 
       <p className={styles.switchPage}>
         New to Resibo? <Link to={paths.signup}>Create an account</Link>
-      </p>
-      <p className={styles.apiTarget}>
-        API target: <code>{env.apiBaseUrl}</code>
       </p>
     </section>
   )

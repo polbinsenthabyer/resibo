@@ -1,7 +1,9 @@
 import { endpoints } from '@/api/endpoints'
 import { http } from '@/api/http'
 import { tokenStorage } from '@/api/tokenStorage'
+import { notify } from '@/lib/notifications'
 
+import { getStoredRole } from './session'
 import type { LoginRequest, LoginResponse, SignupRequest } from './types'
 
 /**
@@ -12,8 +14,13 @@ import type { LoginRequest, LoginResponse, SignupRequest } from './types'
 export const authApi = {
   /** Signs in and stores the token, so later requests are authenticated. */
   async login(credentials: LoginRequest): Promise<LoginResponse> {
+    let successMessage = ''
     const result = await http.post<LoginResponse>(endpoints.auth.login, credentials, {
       authenticated: false,
+      feedback: 'errors',
+      onSuccessMessage: (message) => {
+        successMessage = message
+      },
     })
     tokenStorage.set(result.token)
     if (tokenStorage.get() !== result.token) {
@@ -21,6 +28,11 @@ export const authApi = {
         'This browser could not save your login. Please enable local storage and try again.',
       )
     }
+    if (getStoredRole() !== result.role) {
+      tokenStorage.clear()
+      throw new Error('The login token could not be used. Please try again.')
+    }
+    notify.success(successMessage || 'Signed in successfully.')
     return result
   },
 

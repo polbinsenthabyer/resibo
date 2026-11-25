@@ -1,5 +1,8 @@
 import { createBrowserRouter } from 'react-router-dom'
 
+import { AdminLayout } from '@/features/admin/AdminLayout'
+import { AdminDashboardPage } from '@/features/admin/pages/AdminDashboardPage'
+import { AdminProductsPage } from '@/features/admin/pages/AdminProductsPage'
 import { HomeRedirect } from '@/features/auth/components/HomeRedirect'
 import { RequireRole } from '@/features/auth/components/RequireRole'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
@@ -32,9 +35,13 @@ export const router = createBrowserRouter([
         path: paths.admin,
         element: (
           <RequireRole role="ADMIN">
-            <RoleWelcomePage role="ADMIN" />
+            <AdminLayout />
           </RequireRole>
         ),
+        children: [
+          { index: true, element: <AdminDashboardPage /> },
+          { path: 'products', element: <AdminProductsPage /> },
+        ],
       },
       {
         path: paths.employee,

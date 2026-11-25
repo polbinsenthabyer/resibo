@@ -1,4 +1,5 @@
 import { env } from '@/config/env'
+import { notify } from '@/lib/notifications'
 
 import { ApiError, NetworkError } from './errors'
 import { tokenStorage } from './tokenStorage'
@@ -20,10 +21,19 @@ interface RequestOptions {
   /** Attach the stored bearer token. Default true; false for /api/auth/**. */
   authenticated?: boolean
   signal?: AbortSignal
+  /** Mutations show backend success and errors; reads show errors by default. */
+  feedback?: 'all' | 'errors' | 'none'
+  /** Lets a caller show success only after local follow-up work completes. */
+  onSuccessMessage?: (message: string) => void
 }
 
 async function request<TData>(path: string, options: RequestOptions = {}): Promise<TData> {
-  const { method = 'GET', body, authenticated = true, signal } = options
+  const { method = 'GET', body, authenticated = true, signal, onSuccessMessage } = options
+  const feedback = options.feedback ?? (method === 'GET' ? 'errors' : 'all')
+  const fail = (error: Error): never => {
+    if (feedback !== 'none') notify.error(error.message)
+    throw error
+  }
 
   const headers = new Headers({ Accept: 'application/json' })
   if (body !== undefined) {
@@ -51,7 +61,7 @@ async function request<TData>(path: string, options: RequestOptions = {}): Promi
     if (cause instanceof DOMException && cause.name === 'AbortError') {
       throw cause
     }
-    throw new NetworkError('Could not reach the Resibo API.', cause)
+    return fail(new NetworkError('Could not reach the Resibo API.', cause))
   }
 
   const envelope = await readEnvelope<TData>(response)
@@ -61,22 +71,34 @@ async function request<TData>(path: string, options: RequestOptions = {}): Promi
   // answers with a status but no recognisable body (a proxy, a gateway).
   if (envelope === null) {
     if (!response.ok) {
-      throw new ApiError(
-        `The API returned ${response.status} without a response body.`,
-        `HTTP_${response.status}`,
-        response.status,
+      return fail(
+        new ApiError(
+          `The API returned ${response.status} without a response body.`,
+          `HTTP_${response.status}`,
+          response.status,
+        ),
       )
     }
-    throw new NetworkError('The API returned a response that was not the expected envelope.')
+    return fail(new NetworkError('The API returned a response that was not the expected envelope.'))
   }
 
   if (envelope.responseType === 'ERROR') {
-    throw new ApiError(envelope.message, envelope.code, response.status)
+    return fail(
+      new ApiError(
+        envelope.message.trim() || 'The request failed. Please try again.',
+        envelope.code,
+        response.status,
+      ),
+    )
   }
 
   // `data` is null for endpoints that only confirm an action — signup, delete.
   // The call site's type parameter decides whether that is meaningful, so the
   // null is passed through rather than being turned into an error here.
+  if (envelope.message) {
+    onSuccessMessage?.(envelope.message)
+    if (feedback === 'all') notify.success(envelope.message)
+  }
   return envelope.data as TData
 }
 
@@ -102,7 +124,11 @@ function isResponseDto(value: unknown): boolean {
     return false
   }
   const candidate = value as Partial<ResponseDto>
-  return candidate.responseType === 'SUCCESS' || candidate.responseType === 'ERROR'
+  return (
+    (candidate.responseType === 'SUCCESS' || candidate.responseType === 'ERROR') &&
+    typeof candidate.code === 'string' &&
+    typeof candidate.message === 'string'
+  )
 }
 
 export const http = {

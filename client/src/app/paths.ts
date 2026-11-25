@@ -8,5 +8,6 @@ export const paths = {
   login: '/login',
   signup: '/signup',
   admin: '/admin',
+  adminProducts: '/admin/products',
   employee: '/employee',
 } as const

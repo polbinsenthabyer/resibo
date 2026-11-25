@@ -53,15 +53,6 @@
   margin-top: var(--space-6);
 }
 
-.apiTarget {
-  margin-top: var(--space-6);
-  padding-top: var(--space-4);
-  border-top: var(--border-width) solid var(--color-border);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  overflow-wrap: anywhere;
-}
-
 @media (max-width: $breakpoint-sm) {
   .page {
     margin-block: var(--space-4);

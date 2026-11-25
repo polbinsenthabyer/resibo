@@ -15,29 +15,32 @@ npm ci
 npm run dev          # http://localhost:5173
 ```
 
-Local development uses the `/api` proxy by default. Start the backend on
-`:8083` as well (`./mvnw spring-boot:run` from `server/`), then Vite forwards
-requests to it. The browser sees one origin, so CORS does not apply.
-The current `server/.env.dev` uses the shared live database, so a local signup
-can still create a live account. Check the backend datasource before using it.
-
-To use the deployed API intentionally from development, set the base URL:
+Local development uses the deployed API by default. The signup page warns
+that it can create a live account. To use the optional local backend on
+`:8083`, start it from `server/` and set the base URL to `/api`:
 
 ```sh
-VITE_API_BASE_URL=https://resibo-api.polbinsenthabyer.uk/api npm run dev
+VITE_API_BASE_URL=/api npm run dev
 ```
 
-Production builds still use that deployed API by default. Login and signup
-pages show their effective API target; signup can create a real account.
+Vite then proxies requests to the local backend. That backend currently uses
+the shared live database too, so the proxy does not isolate account writes.
+Production builds also use the deployed API by default.
 
 | Script | What it does |
 |---|---|
-| `npm run dev` | Vite dev server with the `/api` proxy |
+| `npm run dev` | Vite dev server; client calls the deployed API by default |
 | `npm run build` | type-check (`tsc -b`) then production build into `dist/` |
 | `npm run preview` | serve the built `dist/` |
 | `npm run typecheck` | types only, no build |
 | `npm run lint` | oxlint |
 | `npm run format` | Prettier, write |
+
+Run the dev server from the primary checkout at `personal/resibo/client`.
+If edits appear stale, check which Vite process owns port 5173: on Windows,
+`localhost` (`::1`) and `127.0.0.1` can reach different processes even when
+both display port 5173. The duplicate `personal/app/resibo` checkout must not
+be used for development.
 
 ## Deployment
 
@@ -53,6 +56,20 @@ The health page currently displays a temporary SpongeBob GIF to make the
 pipeline result easy to see. It is bundled in `public/spongebob.gif`, sourced
 from the [SpongeBob SquarePants GIPHY channel](https://giphy.com/gifs/dancing-hipster-spongebob-9d1Fo0XyIYXzW).
 
+## Visual assets
+
+Generate new Resibo logos, icons, illustrations, and other original graphics
+with Magnific and save them in its `pol` project. Keep original exports in
+`design/magnific/` and web-ready versions in `public/`. The receipt-and-arrow
+mark in `public/resibo-logo.svg` was generated and traced in
+Magnific. Its source PNG and original SVG are in `design/magnific/`. The web
+version is cropped and adapts its blue to dark browser themes. The header and
+favicon use that same SVG. The temporary GIF above predates this asset policy.
+The admin sidebar, admin action buttons, and theme toggle use Magnific-generated
+SVG icons from `pol`. Original exports and creation links are in
+[`design/magnific/README.md`](design/magnific/README.md); compact web copies
+are in `public/icons/`. Icon-only controls have accessible names and titles.
+
 ## Authentication pages
 
 `/login` and `/signup` use the existing `authApi` calls. Login stores the JWT
@@ -62,15 +79,30 @@ page with a Sign out button. Sign out clears the stored token and returns to
 `/login`. The client reads the token role and expiry for navigation; the API
 still validates the token for every protected request. Signup sends username,
 password, and optional name; it does not request a role or sign the user in.
-Both forms show the API target, handle server errors, and fit narrow screens.
-The signup page warns in development that `server/.env.dev` currently uses the
-shared live database, even when the browser calls the local `/api` proxy.
+Both forms handle server errors and fit narrow screens.
+Backend success and error messages appear in a shared popup stack. Mutating
+requests show both; read requests show errors only. The automatic health check
+keeps its inline status, and login success appears after the token is saved.
+The signup page warns in development because the default deployed API creates
+live accounts. Even the optional local `/api` proxy reaches a backend whose
+current `server/.env.dev` uses the shared live database.
 
 `/` opens the matching role page when a valid-looking session is stored, or
 `/login` otherwise. The health page remains at `/status`. The header has no
 page navigation; its light/dark toggle saves the choice in local storage and
 defaults to the device preference on first visit. The forms, welcome pages,
 and header use the same theme tokens and mobile layout rules.
+
+`/admin` now opens a simple admin workspace with a far-left side menu and catalog count.
+`/admin/products` uses the existing ADMIN-only API routes to list, search,
+create, edit, and delete products. Editing loads the full product first and
+sends all editable fields back; deletion asks for confirmation. Prices are
+displayed without an assumed currency or client-side totals. The EMPLOYEE
+route remains a welcome placeholder. Local development calls the deployed API
+by default, so product writes affect live data.
+The side menu stays visible and uses labeled section icons. Admin action
+buttons and the light/dark toggle show icons instead of text; accessible
+names and hover titles describe their actions.
 
 ## Why it is separate from the backend
 
@@ -137,8 +169,8 @@ Class names are camelCased on the way into TypeScript
 
 ## Talking to the API
 
-Everything goes through `http` in `src/api/http.ts`. Call it through a
-feature's `api.ts`, never directly from a component.
+Everything goes through `http` in `src/api/http.ts`. Call it through an API
+module, never directly from a component.
 
 The backend's contract is unusual enough to be worth knowing:
 **a failed request normally still returns HTTP 200.** Business failures are
@@ -148,7 +180,7 @@ reported in the envelope as `responseType: 'ERROR'` plus a code such as
 `ApiError`, so a caller sees one failure path.
 
 ```ts
-import { productApi } from '@/features/products/api'
+import { productApi } from '@/api/products/api'
 import { ApiError } from '@/api/errors'
 
 try {
@@ -166,26 +198,27 @@ public.
 
 ## Configuration
 
-No env file is needed. `src/config/env.ts` chooses a safe default for each
-environment; `VITE_API_BASE_URL` overrides it. See `.env.example`.
+No env file is needed. `src/config/env.ts` defaults to the deployed API in
+both environments; `VITE_API_BASE_URL` overrides it. See `.env.example`.
 
 | `VITE_API_BASE_URL` | Talks to |
 |---|---|
-| unset in local development | a local backend on `:8083`, through Vite's `/api` proxy |
+| unset in local development | the deployed API — `https://resibo-api.polbinsenthabyer.uk/api` |
 | unset in a production build | the deployed API — `https://resibo-api.polbinsenthabyer.uk/api` |
 | `/api` | the local backend through the dev proxy; use in production only if a same-origin API proxy is configured |
 | an absolute URL | whatever you name |
 
-Both auth pages print the effective target. The health page warns when a
-developer has explicitly pointed it at the deployed API.
+Neither auth page prints the effective target. The signup page warns about
+live account creation in development; the health page indicates when it uses
+the deployed API.
 
 ⚠️ **Every `VITE_`-prefixed value is compiled into the bundle the browser
 downloads.** Nothing secret may go in one — see `resibo-plan.md` §8.
 
 ## Known gaps, deliberately
 
-- **No protected product screen.** Role-specific welcome pages are placeholders;
-  actual product UI waits for the permission decisions in plan §1.3.
+- **No checkout, sales, receipt, or employee workflow.** Product management is
+  ADMIN-only; broader permissions still need the decisions in plan §1.3.
 - **No money or date formatting helpers.** Currency, date format and timezone
   are blank in plan §10, and `responseTime` currently serialises in UTC. A
   formatter here would have had to guess, and a POS prints timestamps on

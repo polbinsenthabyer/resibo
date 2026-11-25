@@ -40,9 +40,9 @@ export default defineConfig({
 
   server: {
     port: 5173,
-    // Local development defaults to /api, so it does not call the public API
-    // directly. The local backend's database is configured separately and may
-    // still be shared with production. 8083 is its port — plan §7.3.
+    // Optional local backend target when VITE_API_BASE_URL=/api. The default
+    // client target is the deployed API. The local backend may still use the
+    // shared live database; check it before testing writes. See plan §7.3.
     proxy: {
       '/api': {
         target: 'http://localhost:8083',
