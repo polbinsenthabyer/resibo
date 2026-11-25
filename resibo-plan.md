@@ -965,8 +965,28 @@ login, not the token already issued. §12 #18.
 | `E0104` | username already exists — case-insensitively |
 | `E0105` | invalid role |
 | `E0106` | **invalid credentials** |
+| `E0201` | admin user management: account does not exist |
+| `E0202` | admin user management: cannot deactivate or demote your own account |
+| `E0203` | admin user management: cannot deactivate or demote the last active ADMIN |
+| `E0204` | admin user management: name longer than 100 characters |
 | `E0401` | not authenticated (HTTP 401) |
 | `E0403` | no permission (HTTP 403) |
+
+`/api/admin/users/**` (§5.1) reuses `E0101`–`E0105` for the same validation on
+the same `username`/`password`/`role` fields signup already enforces — same
+entity, same meaning, not a new code. `E0201`–`E0204` are this endpoint's own:
+not-found, the two demotion/deactivation safeguards, and the name-length check
+`setProduct`'s `productDescription` check is mirrored from.
+
+> ⚠️ **On `POST /api/admin/users/set`, a blank or omitted `role` or `password`
+> on *update* means "leave unchanged" — it does not reset to the create-time
+> default.** This is the opposite of `ProductDto`, where an omitted
+> `productPrice`/`productRemainingStocks` resets to the column default on
+> every save, update included. The two are deliberately different: a price
+> resetting to `0.00` is a visible, correctable mistake; a role or password
+> silently resetting on an unrelated rename would be a silent authorisation
+> change. `isActive` is never touched by `/set` at all — see the dedicated
+> `/activate/{userId}` and `/deactivate/{userId}` below.
 
 **`E0106` is deliberately one code for three failures**: unknown username,
 wrong password, and disabled account. The message is identical too. Telling
@@ -2313,6 +2333,8 @@ What phase 8 does **not** yet include, so nobody reads the row as finished:
 | 21 | **Is "every repository query is native SQL" a rule or a starting point?** (§5.5) | every repository written from here on | 2026-11-24 | open. It is the owner's instruction and is followed everywhere today. It has already cost one runtime bug (the `Integer` `EXISTS` trap), needs an explicit `countQuery` on every paginated query, and needs a field-to-column map for every sortable listing. Worth confirming it is wanted for simple lookups too, rather than only where JPQL fights the query. |
 | 22 | **How does the frontend get built and deployed?** (§7.4) | nothing — **answered, built, and verified** | 2026-11-24 | **Closed for the client.** CI builds `client/dist`; the dedicated `resibo-client-deploy` runner executes `scripts/deploy-client.sh` into `/var/www/resibo/live`; nginx vhost `resibo-web` serves it at `https://resibo.polbinsenthabyer.uk`. Run `45366787290` passed Build and Deploy, and the live GIF matched the committed asset. The backend CI deploy remains separately disabled. |
 | 23 | ~~Two branches each carry a copy of this plan~~ (§7.1) | — | 2026-11-24 | **RESOLVED the same day it was raised.** The monorepo retired `dev/api/resibo` and `dev/app/resibo` in favour of the single `dev/resibo`, so there is one copy of this document again. It cost a rebase and a section renumbering first, which is the evidence for why it was worth resolving rather than managing. |
+| 24 | **The last-active-admin safeguard (§5.1, `/api/admin/users/deactivate`, `/set`) has an unlocked read-then-write race.** Two admins acting on two different admin accounts at the same instant can each see "2 active admins" and each proceed, together stranding the system at zero. | nothing until it happens — recoverable only by hand-written SQL against production, the same recovery path as the first-signup bootstrap race | 2026-11-25 | open, deliberately not fixed. A real fix (`SELECT ... FOR UPDATE`, or a serializable check) cannot be proven by this codebase's Mockito-only service tests — there is no local or CI database to watch a race actually get closed, and inventing a lock without that proof risks a false sense of safety. Blocked in practice by the Testcontainers item, §12 #13. Likelihood is low for a single-store deployment; flagged rather than silently accepted. |
+| 25 | **The admin user list/get response has no stable role-name field**, only the raw `userRoleId` foreign key, whose values depend on seed order and are not safe for a client to hardcode or guess. Codex found this building `/admin/users` and is leaving role unlabelled in the UI until it is closed. | the admin Users screen's role column/filter display | 2026-11-25 | open. The cheapest fix is a `roleName` (or similar) field alongside `userRoleId` in the response — a read-only addition, no contract break. Not done in this pass because it surfaced from the frontend's own integration work after the backend's final review had already run; recorded here rather than folded in unannounced. |
 
 ---
 
