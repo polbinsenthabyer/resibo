@@ -92,7 +92,9 @@ and header use the same theme tokens and mobile layout rules.
 
 `/admin` now opens a simple admin workspace with a far-left side menu and catalog count.
 `/admin/products` uses the existing ADMIN-only API routes to list, search,
-create, edit, and delete products. Editing loads the full product first and
+create, edit, and delete products. Its joined Row/Card icon toggle switches the
+current product page between a compact list and a responsive grid; the choice
+is saved in the browser. Add and Edit open a keyboard-accessible popup. Editing loads the full product first and
 sends all editable fields back; deletion asks for confirmation. Prices are
 displayed without an assumed currency or client-side totals. The EMPLOYEE
 route remains a welcome placeholder. Local development calls the deployed API

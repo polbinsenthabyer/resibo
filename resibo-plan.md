@@ -66,10 +66,10 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.28 — Lucide UI icons; Magnific by explicit request only; scope still unfilled |
+| Document version | 0.29 — admin product views and popup editor; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-25 |
-| Last updated by | Codex (icon source correction) |
+| Last updated by | Codex (admin product display and editor) |
 | Plan status | **AWAITING OWNER INPUT** — the API is deployed and authenticated (§5.4, §7.3), and the React client is now deployed too, at `https://resibo.polbinsenthabyer.uk` (§5.6, §7.4). There is still no checkout, no sale and no receipt, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
 | Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` on `dev/resibo`. A second clone at `%USERPROFILE%\sprintify_solutions\personal\app\resibo` is a duplicate; do not edit it until its fate is decided. |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
@@ -1122,7 +1122,8 @@ errors even when they arrive as HTTP 200. Mutations show success and error;
 reads show error only, and the read-only product-list POST opts out of success.
 The automatic health check keeps its inline diagnostic status instead of
 showing a popup on load. Login waits until its token has been saved and checked
-before showing success. Local form validation failures use the same popup.
+before showing success. Auth form validation uses the popup; product editor
+validation appears inside its modal where the input remains visible.
 The stack shows at most three notices to preserve room for the page; success
 notices dismiss after six seconds, errors stay until dismissed or displaced by
 newer notices. No API contract or backend file changes are required.
@@ -1130,8 +1131,12 @@ newer notices. No API contract or backend file changes are required.
 **Admin workspace (2026-11-25).** `/admin` now has a responsive far-left side
 menu, a simple overview with the existing catalog count, and a Products route
 at `/admin/products`. The products screen lists, searches, and pages through
-items; an inline form creates and edits them, and deletion requires explicit
-confirmation. It uses the server's existing ADMIN-only set/list/get/delete
+items. Administrators can switch between compact rows and a responsive card
+grid through a joined icon toggle. The selected view is stored in the browser
+and applies to the current page without another API request; both views expose
+the same fields and actions. Add and Edit open the existing form in a modal
+popup with keyboard focus handling and a scrollable narrow-screen layout.
+Deletion requires explicit confirmation. It uses the server's existing ADMIN-only set/list/get/delete
 routes through the shared `client/src/api/products/` module. Updates send all
 editable fields because the server resets omitted price and stock to zero.
 The client checks the server's name, description, price, and stock limits
@@ -2381,6 +2386,8 @@ trivia the next session cannot reuse.
 | 2026-11-25 | Build a simple ADMIN workspace on the existing product CRUD API (§5.6) | The owner requested a clean landing page, sidebar, and product management. The backend already implements all four ADMIN product routes, so no server edit or new contract is necessary. A text-only side menu avoids introducing ungenerated icons under the Magnific asset rule. The overview shows only the catalog count available from the API; it does not invent sales metrics. The product UI sends complete update payloads, validates known backend limits, confirms deletes, and handles 401/403 explicitly. Keep the employee placeholder and do not guess the broader POS or permission model. | Owner, implemented by Codex |
 | 2026-11-25 | Keep the admin menu visible and use Magnific icons for sections, actions, and theme (§5.6) | The owner withdrew the requested collapse control and asked for appropriate icons in sidebar sections and icon-only action buttons, including the light/dark control. Generate the icon set in the existing Magnific `pol` project under the standing asset-source rule. Keep visible text beside section icons for orientation, and give each icon-only button an accessible name and title. Reuse Close for clear/cancel and mirror Previous for Next to limit asset count. Keep the menu at the far-left desktop edge and stack it above content on narrow screens. This supersedes the text-only sidebar choice in the preceding decision. | Owner, implemented by Codex |
 | 2026-11-25 | Use Lucide for routine UI icons; Magnific only on explicit request (§5.6) | The owner found generated icons a poor fit for routine controls and corrected the standing asset rule. Replace the Magnific SVG icon set with consistent, tree-shakable React components from Lucide, whose stroke follows the current theme color. Remove the generated icon exports from the repository while retaining the separately requested Magnific logo and favicon. Keep accessible names and 44px targets on icon-only buttons. This supersedes the preceding Magnific-for-every-icon decision; future Magnific calls require a new explicit request. | Owner, implemented by Codex |
+| 2026-11-25 | Offer row and card product views to administrators (§5.6) | The owner wants two ways to browse products. Keep rows as the familiar starting layout and add a responsive card grid using the same loaded page and controls, so switching views cannot alter search, pagination, or product data. Persist the choice in browser storage for navigation continuity. The backend product DTO has no image field, so cards show the existing name, description, price, stock, and actions without inventing imagery or an API change. | Owner, implemented by Codex |
+| 2026-11-25 | Open Add and Edit product in a modal popup (§5.6) | The owner wants product editing to stay in context over the list. Move the existing form into a labelled, keyboard-contained overlay and restore focus to its trigger on close. Keep the shared backend feedback visible above the overlay and repeat failed-save text inside the form for assistive technology. Preserve API behavior and the same validation; make the popup scroll within narrow viewports. | Owner, implemented by Codex |
 
 ---
 
@@ -2416,3 +2423,4 @@ trivia the next session cannot reuse.
 | 2026-11-25 | 0.26 | Added the ADMIN sidebar, overview, and product list/create/edit/delete flow in §5.6 using existing server endpoints; recorded validation, confirmation, 401/403 handling, and why no backend change or new metrics were added. Local and uncommitted pending preview. | Codex |
 | 2026-11-25 | 0.27 | Recorded 13 Magnific-generated sidebar, admin action, and theme SVG icons, their source and cost, and the non-collapsible far-left menu in §5.6/§13. All edits are local; the owner now requests local commits with no push until instructed. | Codex |
 | 2026-11-25 | 0.28 | Replaced routine UI SVG assets with Lucide React icons, narrowed the Magnific rule to explicit requests, and retained the requested logo. Updated §5.6 and §13; verified locally and committed without a push. | Codex |
+| 2026-11-25 | 0.29 | Added a persistent joined row/card toggle and a modal Add/Edit editor in §5.6 and §13; both views use the same product page and controls. Verified locally and committed without a push. | Codex |

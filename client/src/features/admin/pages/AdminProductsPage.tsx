@@ -14,6 +14,16 @@ import { ProductEditor } from '../components/ProductEditor'
 import styles from './AdminPage.module.scss'
 
 const pageSize = 10
+const viewStorageKey = 'resibo-admin-product-view'
+type ProductView = 'row' | 'card'
+
+function savedProductView(): ProductView {
+  try {
+    return window.localStorage.getItem(viewStorageKey) === 'card' ? 'card' : 'row'
+  } catch {
+    return 'row'
+  }
+}
 
 export function AdminProductsPage() {
   const [searchInput, setSearchInput] = useState('')
@@ -23,6 +33,7 @@ export function AdminProductsPage() {
   const [editor, setEditor] = useState<'new' | number | null>(null)
   const editorTrigger = useRef<HTMLButtonElement | null>(null)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [view, setView] = useState<ProductView>(savedProductView)
   const { status, data, error, run } = useAsync((signal) =>
     productApi.list(
       {
@@ -58,6 +69,15 @@ export function AdminProductsPage() {
       if (editorTrigger.current?.isConnected) editorTrigger.current.focus()
       else document.getElementById('add-product-button')?.focus()
     })
+  }
+
+  function changeView(next: ProductView) {
+    setView(next)
+    try {
+      window.localStorage.setItem(viewStorageKey, next)
+    } catch {
+      // The current page still switches when storage is unavailable.
+    }
   }
 
   async function remove(product: Product) {
@@ -139,6 +159,23 @@ export function AdminProductsPage() {
           </div>
         </form>
 
+        <div className={styles.viewControls} role="group" aria-label="Product display">
+          <IconButton
+            icon="rowView"
+            label="Row view"
+            aria-pressed={view === 'row'}
+            className={styles.viewButton}
+            onClick={() => changeView('row')}
+          />
+          <IconButton
+            icon="cardView"
+            label="Card view"
+            aria-pressed={view === 'card'}
+            className={styles.viewButton}
+            onClick={() => changeView('card')}
+          />
+        </div>
+
         {(status === 'idle' || status === 'loading') && (
           <p className={styles.emptyState}>Loading products…</p>
         )}
@@ -164,9 +201,12 @@ export function AdminProductsPage() {
           </p>
         )}
         {status === 'success' && data.items.length > 0 && (
-          <div className={styles.productList}>
+          <div className={view === 'row' ? styles.productList : styles.productCards}>
             {data.items.map((product) => (
-              <article className={styles.productRow} key={product.id}>
+              <article
+                className={view === 'row' ? styles.productRow : styles.productCard}
+                key={product.id}
+              >
                 <div className={styles.productInfo}>
                   <h4>{product.productName}</h4>
                   {product.productDescription && (

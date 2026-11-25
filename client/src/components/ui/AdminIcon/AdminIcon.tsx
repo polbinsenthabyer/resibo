@@ -3,6 +3,8 @@ import {
   ChevronLeft,
   ChevronRight,
   LayoutDashboard,
+  LayoutGrid,
+  List,
   LogOut,
   Package,
   Pencil,
@@ -29,6 +31,8 @@ export type AdminIconName =
   | 'previous'
   | 'next'
   | 'save'
+  | 'rowView'
+  | 'cardView'
 
 interface AdminIconProps {
   name: AdminIconName
@@ -48,6 +52,8 @@ const icons: Record<AdminIconName, LucideIcon> = {
   previous: ChevronLeft,
   next: ChevronRight,
   save: Check,
+  rowView: List,
+  cardView: LayoutGrid,
 }
 
 /** Shared Lucide symbols. Control labels remain separate and accessible. */

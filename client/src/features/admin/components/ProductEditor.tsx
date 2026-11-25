@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 
@@ -7,8 +7,6 @@ import { productApi } from '@/api/products/api'
 import type { ProductUpsertRequest } from '@/api/products/types'
 import { paths } from '@/app/paths'
 import { IconButton } from '@/components/ui/IconButton/IconButton'
-import { notify } from '@/lib/notifications'
-
 import styles from '../pages/AdminPage.module.scss'
 
 interface ProductEditorProps {
@@ -27,6 +25,8 @@ interface FormValues {
 const emptyForm: FormValues = { name: '', description: '', price: '0.00', stock: '0' }
 
 export function ProductEditor({ productId, onClose, onSaved }: ProductEditorProps) {
+  const dialogRef = useRef<HTMLElement>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
   const [values, setValues] = useState<FormValues>(emptyForm)
   const [loadState, setLoadState] = useState<'ready' | 'loading' | 'error'>(
     productId === null ? 'ready' : 'loading',
@@ -34,6 +34,64 @@ export function ProductEditor({ productId, onClose, onSaved }: ProductEditorProp
   const [reloadKey, setReloadKey] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
   const [loadError, setLoadError] = useState<Error | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    dialogRef.current?.focus()
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [])
+
+  useEffect(() => {
+    if (loadState === 'ready') nameInputRef.current?.focus()
+  }, [loadState])
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const dialog = dialogRef.current
+      if (!dialog) return
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        if (!isSaving) onClose()
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const controls = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled])',
+        ),
+      )
+      const first = controls[0]
+      const last = controls.at(-1)
+      if (!first || !last) {
+        event.preventDefault()
+        dialog.focus()
+      } else if (
+        event.shiftKey &&
+        (document.activeElement === first ||
+          document.activeElement === dialog ||
+          !dialog.contains(document.activeElement))
+      ) {
+        event.preventDefault()
+        last.focus()
+      } else if (
+        !event.shiftKey &&
+        (document.activeElement === last ||
+          document.activeElement === dialog ||
+          !dialog.contains(document.activeElement))
+      ) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isSaving, onClose])
 
   useEffect(() => {
     if (productId === null) return
@@ -60,6 +118,7 @@ export function ProductEditor({ productId, onClose, onSaved }: ProductEditorProp
   }, [productId, reloadKey])
 
   function update(field: keyof FormValues, value: string) {
+    setFormError(null)
     setValues((current) => ({ ...current, [field]: value }))
   }
 
@@ -70,19 +129,19 @@ export function ProductEditor({ productId, onClose, onSaved }: ProductEditorProp
     const name = values.name.trim()
     const description = values.description.trim()
     if (!name || name.length > 100) {
-      notify.error('Enter a product name of at most 100 characters.')
+      setFormError('Enter a product name of at most 100 characters.')
       return
     }
     if (description.length > 250) {
-      notify.error('Keep the description within 250 characters.')
+      setFormError('Keep the description within 250 characters.')
       return
     }
     if (!/^\d+(\.\d{1,2})?$/.test(values.price) || Number(values.price) > 99999999.99) {
-      notify.error('Enter a nonnegative price with at most two decimal places.')
+      setFormError('Enter a nonnegative price with at most two decimal places.')
       return
     }
     if (!/^\d+$/.test(values.stock) || Number(values.stock) > 2147483647) {
-      notify.error('Enter a nonnegative whole-number stock quantity.')
+      setFormError('Enter a nonnegative whole-number stock quantity.')
       return
     }
 
@@ -93,126 +152,146 @@ export function ProductEditor({ productId, onClose, onSaved }: ProductEditorProp
       productPrice: Number(values.price),
       productRemainingStocks: Number(values.stock),
     }
+    setFormError(null)
     setIsSaving(true)
     try {
       await productApi.save(payload)
       onSaved()
-    } catch {
-      // The shared HTTP client already shows the backend error popup.
+    } catch (cause) {
+      setFormError(cause instanceof Error ? cause.message : 'Could not save product.')
     } finally {
       setIsSaving(false)
     }
   }
 
   return (
-    <section className={styles.editor} aria-labelledby="product-editor-title">
-      <div className={styles.sectionHeading}>
-        <div>
-          <p className={styles.eyebrow}>{productId === null ? 'New product' : 'Edit product'}</p>
-          <h3 id="product-editor-title">
-            {productId === null ? 'Add a product' : 'Update product'}
-          </h3>
+    <div className={styles.editorOverlay}>
+      <section
+        ref={dialogRef}
+        className={styles.editor}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="product-editor-title"
+        tabIndex={-1}
+      >
+        <div className={styles.sectionHeading}>
+          <div>
+            <p className={styles.eyebrow}>{productId === null ? 'New product' : 'Edit product'}</p>
+            <h3 id="product-editor-title">
+              {productId === null ? 'Add a product' : 'Update product'}
+            </h3>
+          </div>
+          <IconButton
+            icon="close"
+            label="Close product editor"
+            onClick={onClose}
+            disabled={isSaving}
+          />
         </div>
-        <IconButton
-          icon="close"
-          label="Close product editor"
-          onClick={onClose}
-          disabled={isSaving}
-        />
-      </div>
 
-      {loadState === 'loading' && <p className={styles.subtle}>Loading product…</p>}
-      {loadState === 'error' && (
-        <div className={styles.emptyState}>
-          <p>
-            {loadError instanceof ApiError && loadError.isUnauthenticated
-              ? 'Your session has ended.'
-              : loadError instanceof ApiError && loadError.isForbidden
-                ? 'Access denied to this product.'
-                : 'Could not load this product.'}
-          </p>
-          {loadError instanceof ApiError && loadError.isUnauthenticated ? (
-            <Link to={paths.login}>Log in again</Link>
-          ) : loadError instanceof ApiError && loadError.isForbidden ? null : (
-            <IconButton
-              icon="refresh"
-              label="Retry loading product"
-              onClick={() => {
-                setLoadState('loading')
-                setReloadKey((key) => key + 1)
-              }}
-            />
-          )}
-        </div>
-      )}
-      {loadState === 'ready' && (
-        <form className={styles.editorForm} onSubmit={(event) => void save(event)}>
-          <label className={styles.field}>
-            <span>Product name</span>
-            <input
-              autoFocus
-              required
-              maxLength={100}
-              value={values.name}
-              disabled={isSaving}
-              onChange={(event) => update('name', event.target.value)}
-            />
-          </label>
-          <label className={styles.field}>
-            <span>
-              Description <span className={styles.subtle}>(optional)</span>
-            </span>
-            <textarea
-              maxLength={250}
-              rows={3}
-              value={values.description}
-              disabled={isSaving}
-              onChange={(event) => update('description', event.target.value)}
-            />
-          </label>
-          <div className={styles.fieldPair}>
+        {loadState === 'loading' && <p className={styles.subtle}>Loading product…</p>}
+        {loadState === 'error' && (
+          <div className={styles.emptyState}>
+            <p>
+              {loadError instanceof ApiError && loadError.isUnauthenticated
+                ? 'Your session has ended.'
+                : loadError instanceof ApiError && loadError.isForbidden
+                  ? 'Access denied to this product.'
+                  : 'Could not load this product.'}
+            </p>
+            {loadError instanceof ApiError && loadError.isUnauthenticated ? (
+              <Link to={paths.login}>Log in again</Link>
+            ) : loadError instanceof ApiError && loadError.isForbidden ? null : (
+              <IconButton
+                icon="refresh"
+                label="Retry loading product"
+                onClick={() => {
+                  setLoadState('loading')
+                  setReloadKey((key) => key + 1)
+                }}
+              />
+            )}
+          </div>
+        )}
+        {loadState === 'ready' && (
+          <form className={styles.editorForm} onSubmit={(event) => void save(event)}>
             <label className={styles.field}>
-              <span>Price</span>
+              <span>Product name</span>
               <input
+                ref={nameInputRef}
                 required
-                inputMode="decimal"
-                value={values.price}
+                maxLength={100}
+                value={values.name}
                 disabled={isSaving}
-                onChange={(event) => update('price', event.target.value)}
+                onChange={(event) => update('name', event.target.value)}
               />
             </label>
             <label className={styles.field}>
-              <span>Stock</span>
-              <input
-                required
-                inputMode="numeric"
-                value={values.stock}
+              <span>
+                Description <span className={styles.subtle}>(optional)</span>
+              </span>
+              <textarea
+                maxLength={250}
+                rows={3}
+                value={values.description}
                 disabled={isSaving}
-                onChange={(event) => update('stock', event.target.value)}
+                onChange={(event) => update('description', event.target.value)}
               />
             </label>
-          </div>
-          <p className={styles.subtle}>
-            Price has up to two decimal places. Stock is a whole number.
-          </p>
-          <div className={styles.actions}>
-            <IconButton
-              type="submit"
-              variant="primary"
-              icon="save"
-              label={
-                isSaving
-                  ? 'Saving product'
-                  : productId === null
-                    ? 'Create product'
-                    : 'Save product changes'
-              }
-              disabled={isSaving}
-            />
-            <IconButton icon="close" label="Cancel editing" onClick={onClose} disabled={isSaving} />
-          </div>
-        </form>
-      )}
-    </section>
+            <div className={styles.fieldPair}>
+              <label className={styles.field}>
+                <span>Price</span>
+                <input
+                  required
+                  inputMode="decimal"
+                  value={values.price}
+                  disabled={isSaving}
+                  onChange={(event) => update('price', event.target.value)}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>Stock</span>
+                <input
+                  required
+                  inputMode="numeric"
+                  value={values.stock}
+                  disabled={isSaving}
+                  onChange={(event) => update('stock', event.target.value)}
+                />
+              </label>
+            </div>
+            <p className={styles.subtle}>
+              Price has up to two decimal places. Stock is a whole number.
+            </p>
+            {formError && (
+              <p className={styles.formError} role="alert">
+                {formError}
+              </p>
+            )}
+            <div className={styles.actions}>
+              <IconButton
+                type="submit"
+                variant="primary"
+                icon="save"
+                label={
+                  isSaving
+                    ? 'Saving product'
+                    : productId === null
+                      ? 'Create product'
+                      : 'Save product changes'
+                }
+                disabled={isSaving}
+              />
+              <IconButton
+                icon="close"
+                label="Cancel editing"
+                onClick={onClose}
+                disabled={isSaving}
+              />
+            </div>
+          </form>
+        )}
+      </section>
+    </div>
   )
 }
