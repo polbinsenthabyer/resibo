@@ -5,7 +5,7 @@
 > disagree, one of them is a bug: either the code drifted, or this file went
 > stale and must be corrected in the same change that revealed it.
 
-**Status: planning, with a deployed API and React client with auth, an admin catalog, and an employee placeholder.** A Spring Boot application runs on the server in Docker behind the
+**Status: planning, with a deployed API and React client with auth, an admin catalog and Users screen, and an employee placeholder.** The Users screen awaits deployment of its API. A Spring Boot application runs on the server in Docker behind the
 host's nginx, fronted by the Cloudflare tunnel that already serves the sibling
 projects, answering on `https://resibo-api.polbinsenthabyer.uk` (§7.3). It
 connects to MariaDB as a dedicated least-privilege account, with Hibernate
@@ -15,7 +15,7 @@ catalog.
 
 **Read that narrowly.** What exists is a way to log in and a list of products.
 There is no checkout, no sale, no receipt, no payment, no shift, no stock
-movement; the client has login, signup, health, admin product management, and an employee welcome page but no POS workflow. **Every `[BLOCKER]` item below is
+movement; the client has login, signup, health, admin product and user management, and an employee welcome page but no POS workflow. **Every `[BLOCKER]` item below is
 still unanswered, and nothing that depends on one should be written until it
 is.** The two roles are a working minimum, not the answer to §1.3. The
 `product` table is a name, a price and a stock count, not the §4 domain model.
@@ -66,10 +66,10 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.33 — admin Users contract alignment; scope still unfilled |
+| Document version | 0.34 — admin Users push and deployment status; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-25 |
-| Last updated by | Codex (admin Users contract alignment) |
+| Last updated by | Codex (admin Users deployment status) |
 | Plan status | **AWAITING OWNER INPUT** — the API is deployed and authenticated (§5.4, §7.3), and the React client is now deployed too, at `https://resibo.polbinsenthabyer.uk` (§5.6, §7.4). There is still no checkout, no sale and no receipt, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
 | Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` on `dev/resibo`. A second clone at `%USERPROFILE%\sprintify_solutions\personal\app\resibo` is a duplicate; do not edit it until its fate is decided. |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
@@ -1186,8 +1186,9 @@ backend enforces self/last-active-admin safeguards. Current list/get responses
 expose only a numeric `userRoleId`, whose values must not be guessed: the UI
 marks each role unavailable and keeps the edit form on "Keep current role"
 until the backend adds a stable role-name field.
-The backend endpoint is committed locally but not yet deployed, so this UI's
-API behavior has not been verified against the deployed service.
+The frontend and backend commits are pushed. Client CI deployed this screen,
+but server CI skipped its deployment, so this UI's API behavior has not been
+verified against the deployed service.
 
 | Field | Value |
 |---|---|
@@ -2480,4 +2481,5 @@ trivia the next session cannot reuse.
 | 2026-11-25 | 0.30 | Added a left-sliding mobile admin drawer from the Resibo header, put theme and Sign out icons together at its bottom, and flattened the phone catalog layout; retained the desktop sidebar. Recorded rationale in §13; verified and committed for push. | Codex |
 | 2026-11-25 | 0.31 | Added the admin user management API — `POST/GET /api/admin/users/{set,list,get/{id}}` plus dedicated `POST /activate/{id}` and `POST /deactivate/{id}` — to §5.1's endpoint table (eight endpoints → thirteen) and §13. Backend only; no frontend screen. | Claude |
 | 2026-11-25 | 0.32 | Added the `/admin/users` sidebar/workspace plan in §5.6 and §13, including create/edit, list/filter/page, activation, and the role-name response gap. Frontend lint/build/format/diff checks, local route HTTP, and independent review passed; commit waits for the backend's whole-branch review. Backend deployment is separate. | Codex |
-| 2026-11-25 | 0.33 | Aligned the Users response type and role display with the server's unchanged wire contract after its validation fixes; documented the remaining role-name API gap. Client lint/build/format/diff and local route checks passed; independent reviewer accepted. Local commit recorded in the vault Changelog; push held. | Codex |
+| 2026-11-25 | 0.33 | Aligned the Users response type and role display with the server's unchanged wire contract after its validation fixes; documented the remaining role-name API gap. Client lint/build/format/diff and local route checks passed; independent reviewer accepted; committed as `ade204c`. | Codex |
+| 2026-11-25 | 0.34 | Recorded the authorized push through `ade204c`, successful client Build and Deploy and server Build and Test, matching live client asset hashes, and skipped server deployment. The Users API still needs a separate backend deployment before browser/API interaction can be verified. | Codex |
