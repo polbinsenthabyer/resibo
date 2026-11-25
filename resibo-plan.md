@@ -66,10 +66,10 @@ becomes the administrator — an open exposure, recorded as §8.1 risk 6.
 
 | Field | Value |
 |---|---|
-| Document version | 0.29 — admin product views and popup editor; scope still unfilled |
+| Document version | 0.30 — mobile admin drawer and catalog layout; scope still unfilled |
 | Created | 2026-11-24 |
 | Last updated | 2026-11-25 |
-| Last updated by | Codex (admin product display and editor) |
+| Last updated by | Codex (mobile admin navigation and catalog layout) |
 | Plan status | **AWAITING OWNER INPUT** — the API is deployed and authenticated (§5.4, §7.3), and the React client is now deployed too, at `https://resibo.polbinsenthabyer.uk` (§5.6, §7.4). There is still no checkout, no sale and no receipt, and every `[BLOCKER]` in §1, §2 and §6.1.1 is still open |
 | Working copy | `%USERPROFILE%\sprintify_solutions\personal\resibo` on `dev/resibo`. A second clone at `%USERPROFILE%\sprintify_solutions\personal\app\resibo` is a duplicate; do not edit it until its fate is decided. |
 | Remote | `https://github.com/polbinsenthabyer/resibo.git` |
@@ -1106,9 +1106,11 @@ call Magnific MCP for a new visual only when explicitly asked. The previously
 generated 13 UI SVGs were removed from the repository; they had cost 4,875
 Magnific credits, recorded here for provenance. The side menu keeps text labels
 beside Lucide icons; action buttons and the theme toggle use icons with
-accessible names and hover titles. The requested collapsible menu was
-subsequently withdrawn, so it stays visible at the far left on desktop and
-stacks on narrow screens.
+accessible names and hover titles. The desktop menu stays visible at the far
+left. On narrow screens, the burger button replaces the theme icon at the right
+of the Resibo header and opens a left-sliding drawer over a backdrop. The drawer
+contains the same links, with icon-only theme and Sign out controls together at
+its bottom. It closes from the backdrop, Escape, close button, or section choice.
 
 **UI labels (2026-11-25).** Login and signup no longer print the API target;
 it remains in the client configuration and development documentation. The
@@ -1128,14 +1130,17 @@ The stack shows at most three notices to preserve room for the page; success
 notices dismiss after six seconds, errors stay until dismissed or displaced by
 newer notices. No API contract or backend file changes are required.
 
-**Admin workspace (2026-11-25).** `/admin` now has a responsive far-left side
-menu, a simple overview with the existing catalog count, and a Products route
+**Admin workspace (2026-11-25).** `/admin` now has a far-left desktop side
+menu and a mobile slide-in drawer, a simple overview with the existing catalog count, and a Products route
 at `/admin/products`. The products screen lists, searches, and pages through
 items. Administrators can switch between compact rows and a responsive card
 grid through a joined icon toggle. The selected view is stored in the browser
 and applies to the current page without another API request; both views expose
 the same fields and actions. Add and Edit open the existing form in a modal
 popup with keyboard focus handling and a scrollable narrow-screen layout.
+On phones, the catalog panel loses its extra border and inset, the count sits
+beside the view toggle, and redundant header text is hidden to leave more room
+for the cards.
 Deletion requires explicit confirmation. It uses the server's existing ADMIN-only set/list/get/delete
 routes through the shared `client/src/api/products/` module. Updates send all
 editable fields because the server resets omitted price and stock to zero.
@@ -1247,6 +1252,8 @@ verify the signature, and the backend remains the authority for protected
 API calls. There is no token revocation endpoint (§12 #18).
 
 The top header contains branding and a light/dark toggle, with no page links.
+On mobile ADMIN routes, the burger replaces that toggle and the theme control
+moves into the slide-in drawer.
 `/` routes to login or the stored role page; the health page remains at
 `/status`. Theme choice is saved separately in `localStorage`, starts from the
 device color preference when unset, and controls shared CSS tokens across all
@@ -2388,6 +2395,8 @@ trivia the next session cannot reuse.
 | 2026-11-25 | Use Lucide for routine UI icons; Magnific only on explicit request (§5.6) | The owner found generated icons a poor fit for routine controls and corrected the standing asset rule. Replace the Magnific SVG icon set with consistent, tree-shakable React components from Lucide, whose stroke follows the current theme color. Remove the generated icon exports from the repository while retaining the separately requested Magnific logo and favicon. Keep accessible names and 44px targets on icon-only buttons. This supersedes the preceding Magnific-for-every-icon decision; future Magnific calls require a new explicit request. | Owner, implemented by Codex |
 | 2026-11-25 | Offer row and card product views to administrators (§5.6) | The owner wants two ways to browse products. Keep rows as the familiar starting layout and add a responsive card grid using the same loaded page and controls, so switching views cannot alter search, pagination, or product data. Persist the choice in browser storage for navigation continuity. The backend product DTO has no image field, so cards show the existing name, description, price, stock, and actions without inventing imagery or an API change. | Owner, implemented by Codex |
 | 2026-11-25 | Open Add and Edit product in a modal popup (§5.6) | The owner wants product editing to stay in context over the list. Move the existing form into a labelled, keyboard-contained overlay and restore focus to its trigger on close. Keep the shared backend feedback visible above the overlay and repeat failed-save text inside the form for assistive technology. Preserve API behavior and the same validation; make the popup scroll within narrow viewports. | Owner, implemented by Codex |
+| 2026-11-25 | Use a slide-in drawer for mobile admin navigation (§5.6) | The owner wants a conventional mobile side menu. Keep the far-left sidebar fully visible on desktop, where the earlier collapse request was withdrawn. Put the burger at the right of the Resibo header on mobile and remove the extra Admin strip. A left-sliding drawer and backdrop reveal the same links, with icon-only theme and Sign out controls together at the bottom. Close on Escape, backdrop, close button, or route choice; synchronize theme controls across viewport changes. No route or backend behavior changes. | Owner, implemented by Codex |
+| 2026-11-25 | Flatten the mobile product catalog (§5.6) | The owner highlighted the phone product screen as too boxed in. The outer catalog panel and product cards each added border and padding, narrowing the usable width. Remove the outer mobile panel treatment, consolidate the count with the view toggle, and reduce redundant heading text while preserving the full desktop panel and all product data and actions. | Owner, implemented by Codex |
 
 ---
 
@@ -2424,3 +2433,4 @@ trivia the next session cannot reuse.
 | 2026-11-25 | 0.27 | Recorded 13 Magnific-generated sidebar, admin action, and theme SVG icons, their source and cost, and the non-collapsible far-left menu in §5.6/§13. All edits are local; the owner now requests local commits with no push until instructed. | Codex |
 | 2026-11-25 | 0.28 | Replaced routine UI SVG assets with Lucide React icons, narrowed the Magnific rule to explicit requests, and retained the requested logo. Updated §5.6 and §13; verified locally and committed without a push. | Codex |
 | 2026-11-25 | 0.29 | Added a persistent joined row/card toggle and a modal Add/Edit editor in §5.6 and §13; both views use the same product page and controls. Verified locally, then pushed at the owner's request. | Codex |
+| 2026-11-25 | 0.30 | Added a left-sliding mobile admin drawer from the Resibo header, put theme and Sign out icons together at its bottom, and flattened the phone catalog layout; retained the desktop sidebar. Recorded rationale in §13; verified and committed for push. | Codex |

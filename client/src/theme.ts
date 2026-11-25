@@ -1,6 +1,12 @@
 export type Theme = 'light' | 'dark'
 
 const THEME_KEY = 'resibo.theme'
+const listeners = new Set<() => void>()
+
+export function subscribeTheme(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
 
 export function currentTheme(): Theme {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'
@@ -23,6 +29,7 @@ export function initializeTheme(): void {
 
 export function setTheme(theme: Theme): void {
   document.documentElement.dataset.theme = theme
+  listeners.forEach((listener) => listener())
   try {
     window.localStorage.setItem(THEME_KEY, theme)
   } catch {

@@ -90,7 +90,8 @@ page navigation; its light/dark toggle saves the choice in local storage and
 defaults to the device preference on first visit. The forms, welcome pages,
 and header use the same theme tokens and mobile layout rules.
 
-`/admin` now opens a simple admin workspace with a far-left side menu and catalog count.
+`/admin` now opens a simple admin workspace with a far-left desktop side menu,
+a mobile slide-in menu opened from the Resibo header, and catalog count.
 `/admin/products` uses the existing ADMIN-only API routes to list, search,
 create, edit, and delete products. Its joined Row/Card icon toggle switches the
 current product page between a compact list and a responsive grid; the choice
@@ -99,7 +100,11 @@ sends all editable fields back; deletion asks for confirmation. Prices are
 displayed without an assumed currency or client-side totals. The EMPLOYEE
 route remains a welcome placeholder. Local development calls the deployed API
 by default, so product writes affect live data.
-The side menu stays visible and uses labeled section icons. Admin action
+The desktop side menu stays visible; the mobile drawer slides in from the left
+over a backdrop and closes from its close button, backdrop, Escape, or a section
+choice. Mobile theme and Sign out are icon buttons side by side at the bottom
+of the drawer. The mobile product list uses a flatter layout with more card width.
+Both menus use labeled section icons. Admin action
 buttons and the light/dark toggle show icons instead of text; accessible
 names and hover titles describe their actions.
 

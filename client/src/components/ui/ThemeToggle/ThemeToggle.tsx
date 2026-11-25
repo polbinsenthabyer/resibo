@@ -1,20 +1,18 @@
-import { useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { Moon, Sun } from 'lucide-react'
 
-import { currentTheme, setTheme } from '@/theme'
-import type { Theme } from '@/theme'
+import { currentTheme, setTheme, subscribeTheme } from '@/theme'
 
 import { Button } from '../Button'
 
 import styles from './ThemeToggle.module.scss'
 
 export function ThemeToggle() {
-  const [theme, updateTheme] = useState<Theme>(() => currentTheme())
+  const theme = useSyncExternalStore(subscribeTheme, currentTheme)
 
   function toggleTheme() {
     const nextTheme = theme === 'dark' ? 'light' : 'dark'
     setTheme(nextTheme)
-    updateTheme(nextTheme)
   }
 
   return (

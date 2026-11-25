@@ -128,10 +128,6 @@ export function AdminProductsPage() {
       )}
 
       <div className={styles.panel}>
-        <div className={styles.sectionHeading}>
-          <h3>Product list</h3>
-          {status === 'success' && <span className={styles.count}>{data.totalElements} total</span>}
-        </div>
         <form className={styles.searchForm} onSubmit={submitSearch}>
           <label className={styles.searchLabel} htmlFor="product-search">
             Search products
@@ -159,21 +155,24 @@ export function AdminProductsPage() {
           </div>
         </form>
 
-        <div className={styles.viewControls} role="group" aria-label="Product display">
-          <IconButton
-            icon="rowView"
-            label="Row view"
-            aria-pressed={view === 'row'}
-            className={styles.viewButton}
-            onClick={() => changeView('row')}
-          />
-          <IconButton
-            icon="cardView"
-            label="Card view"
-            aria-pressed={view === 'card'}
-            className={styles.viewButton}
-            onClick={() => changeView('card')}
-          />
+        <div className={styles.listTools}>
+          {status === 'success' && <span className={styles.count}>{data.totalElements} total</span>}
+          <div className={styles.viewControls} role="group" aria-label="Product display">
+            <IconButton
+              icon="rowView"
+              label="Row view"
+              aria-pressed={view === 'row'}
+              className={styles.viewButton}
+              onClick={() => changeView('row')}
+            />
+            <IconButton
+              icon="cardView"
+              label="Card view"
+              aria-pressed={view === 'card'}
+              className={styles.viewButton}
+              onClick={() => changeView('card')}
+            />
+          </div>
         </div>
 
         {(status === 'idle' || status === 'loading') && (

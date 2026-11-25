@@ -38,6 +38,10 @@
   margin-left: auto;
 }
 
+.adminMenuControl {
+  display: none;
+}
+
 .main {
   flex: 1;
   width: 100%;
@@ -52,6 +56,15 @@
 }
 
 @media (max-width: $breakpoint-sm) {
+  .adminMenuControl {
+    display: block;
+    margin-left: auto;
+  }
+
+  .adminThemeControl {
+    display: none;
+  }
+
   .header,
   .main {
     padding: var(--space-4);

@@ -6,6 +6,7 @@ import {
   LayoutGrid,
   List,
   LogOut,
+  Menu,
   Package,
   Pencil,
   Plus,
@@ -33,6 +34,7 @@ export type AdminIconName =
   | 'save'
   | 'rowView'
   | 'cardView'
+  | 'menu'
 
 interface AdminIconProps {
   name: AdminIconName
@@ -54,6 +56,7 @@ const icons: Record<AdminIconName, LucideIcon> = {
   save: Check,
   rowView: List,
   cardView: LayoutGrid,
+  menu: Menu,
 }
 
 /** Shared Lucide symbols. Control labels remain separate and accessible. */
