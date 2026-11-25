@@ -91,10 +91,40 @@ public class UserServiceImpl implements UserService {
                 user.setCreatedBy(actor);
                 user.setCreatedAt(now);
             } else {
-                // Update path: step group B implements this (role-change
-                // safeguards, leave-unchanged-when-blank). Group A's tests
-                // never reach here (dto.getId() is always null in them).
-                throw new UnsupportedOperationException("update path not yet implemented — step group B");
+                user = userRepository.findById(dto.getId()).orElse(null);
+                if (user == null) {
+                    return ResponseUtility.getErrorResponse("E0201", MessageType.ERROR_USER_NOT_EXIST);
+                }
+
+                UserRoleType currentRole = userUtility.roleTypeOf(user);
+                boolean roleIsChanging = parsedRole != null && parsedRole != currentRole;
+                if (roleIsChanging
+                        && currentRole == UserRoleType.ADMIN
+                        && parsedRole == UserRoleType.EMPLOYEE) {
+                    if (actor != null && actor.equalsIgnoreCase(user.getUsername())) {
+                        return ResponseUtility.getErrorResponse("E0202", MessageType.ERROR_CANNOT_MODIFY_OWN_ACCOUNT);
+                    }
+                    if (Boolean.TRUE.equals(user.getIsActive())) {
+                        Long adminRoleId = userUtility.findRoleIdByRoleType(UserRoleType.ADMIN);
+                        if (userRepository.countActiveUsersByRoleId(adminRoleId) <= 1) {
+                            return ResponseUtility.getErrorResponse("E0203", MessageType.ERROR_LAST_ACTIVE_ADMIN);
+                        }
+                    }
+                }
+                if (roleIsChanging) {
+                    user.setUserRoleId(userUtility.findRoleIdByRoleType(parsedRole));
+                }
+                // else: userRoleId is left exactly as it was — no re-resolve,
+                // no reassignment, so a plain rename never needs the current
+                // role's id to leave it alone.
+
+                user.setUsername(username);
+                user.setName(dto.getName());
+                if (passwordProvided) {
+                    user.setPassword(securityUtil.hashPassword(rawPassword));
+                }
+                // isActive, createdBy, createdAt are untouched here on purpose —
+                // activation is a dedicated endpoint, not folded into /set.
             }
 
             user.setUpdatedBy(actor);

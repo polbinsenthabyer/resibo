@@ -130,4 +130,161 @@ class UserServiceImplTest {
         verify(userRepository).save(saved.capture());
         assertThat(saved.getValue().getUserRoleId()).isEqualTo(1L);
     }
+
+    // --- setUser: update, role-change safeguards, and the duplicate race --
+
+    @Test
+    void setUpdateLeavesRoleUnchangedWhenBlank() {
+        User existing = new User();
+        existing.setId(5L);
+        existing.setUsername("staffer");
+        existing.setUserRoleId(2L);
+        existing.setIsActive(true);
+        when(userRepository.findById(5L)).thenReturn(java.util.Optional.of(existing));
+        when(userUtility.roleTypeOf(existing)).thenReturn(UserRoleType.EMPLOYEE);
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        UserDto dto = new UserDto();
+        dto.setId(5L);
+        dto.setUsername("staffer");   // unchanged
+        dto.setName("Renamed Person");
+
+        assertThat(service.setUser(dto).isSuccess()).isTrue();
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertThat(saved.getValue().getUserRoleId()).isEqualTo(2L);   // unchanged, not reset
+        assertThat(saved.getValue().getIsActive()).isTrue();          // untouched by /set
+    }
+
+    @Test
+    void setUpdateWithoutPasswordLeavesHashUnchanged() {
+        User existing = new User();
+        existing.setId(6L);
+        existing.setUsername("staffer");
+        existing.setPassword("OLD_HASH");
+        when(userRepository.findById(6L)).thenReturn(java.util.Optional.of(existing));
+        when(userUtility.roleTypeOf(existing)).thenReturn(UserRoleType.EMPLOYEE);
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        UserDto dto = new UserDto();
+        dto.setId(6L);
+        dto.setUsername("staffer");
+
+        service.setUser(dto);
+
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertThat(saved.getValue().getPassword()).isEqualTo("OLD_HASH");
+        verify(securityUtil, never()).hashPassword(any());
+    }
+
+    @Test
+    void setRejectsCaseInsensitiveDuplicateOnRename() {
+        // The clash check runs before the fetch-by-id (same order as
+        // ProductServiceImpl.setProduct), so it returns before findById is
+        // ever called — no stub for the existing row is needed here.
+        User clash = new User();
+        clash.setId(9L);
+        clash.setUsername("pol");
+        when(userUtility.findByUsername("POL")).thenReturn(clash);
+
+        UserDto dto = new UserDto();
+        dto.setId(5L);
+        dto.setUsername("POL");   // different case, same row as "pol"
+
+        assertThat(service.setUser(dto).getCode()).isEqualTo("E0104");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void setWithUnknownIdReturnsNotExist() {
+        when(userRepository.findById(404L)).thenReturn(java.util.Optional.empty());
+        UserDto dto = new UserDto();
+        dto.setId(404L);
+        dto.setUsername("ghost");
+
+        assertThat(service.setUser(dto).getCode()).isEqualTo("E0201");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void setRejectsSelfDemotion() {
+        User admin = new User();
+        admin.setId(1L);
+        admin.setUsername("polbinsent");
+        admin.setIsActive(true);
+        when(userRepository.findById(1L)).thenReturn(java.util.Optional.of(admin));
+        when(userUtility.roleTypeOf(admin)).thenReturn(UserRoleType.ADMIN);
+        when(securityUtil.currentUsername()).thenReturn("polbinsent");
+
+        UserDto dto = new UserDto();
+        dto.setId(1L);
+        dto.setUsername("polbinsent");
+        dto.setRole("EMPLOYEE");
+
+        assertThat(service.setUser(dto).getCode()).isEqualTo("E0202");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void setRejectsDemotingTheLastActiveAdmin() {
+        User otherAdmin = new User();
+        otherAdmin.setId(2L);
+        otherAdmin.setUsername("other-admin");
+        otherAdmin.setIsActive(true);
+        when(userRepository.findById(2L)).thenReturn(java.util.Optional.of(otherAdmin));
+        when(userUtility.roleTypeOf(otherAdmin)).thenReturn(UserRoleType.ADMIN);
+        when(securityUtil.currentUsername()).thenReturn("polbinsent");   // different caller
+        when(userUtility.findRoleIdByRoleType(UserRoleType.ADMIN)).thenReturn(1L);
+        when(userRepository.countActiveUsersByRoleId(1L)).thenReturn(1L);   // only this one
+
+        UserDto dto = new UserDto();
+        dto.setId(2L);
+        dto.setUsername("other-admin");
+        dto.setRole("EMPLOYEE");
+
+        assertThat(service.setUser(dto).getCode()).isEqualTo("E0203");
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void setAllowsDemotingAnAdminWhenAnotherActiveAdminExists() {
+        User otherAdmin = new User();
+        otherAdmin.setId(2L);
+        otherAdmin.setUsername("other-admin");
+        otherAdmin.setIsActive(true);
+        when(userRepository.findById(2L)).thenReturn(java.util.Optional.of(otherAdmin));
+        when(userUtility.roleTypeOf(otherAdmin)).thenReturn(UserRoleType.ADMIN);
+        when(securityUtil.currentUsername()).thenReturn("polbinsent");
+        when(userUtility.findRoleIdByRoleType(UserRoleType.ADMIN)).thenReturn(1L);
+        when(userRepository.countActiveUsersByRoleId(1L)).thenReturn(2L);   // two active admins
+        when(userUtility.findRoleIdByRoleType(UserRoleType.EMPLOYEE)).thenReturn(2L);
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+
+        UserDto dto = new UserDto();
+        dto.setId(2L);
+        dto.setUsername("other-admin");
+        dto.setRole("EMPLOYEE");
+
+        assertThat(service.setUser(dto).isSuccess()).isTrue();
+    }
+
+    @Test
+    void setTranslatesAConstraintViolationIntoTheDuplicateCodeOnUpdate() {
+        User existing = new User();
+        existing.setId(5L);
+        existing.setUsername("staffer");
+        when(userUtility.findByUsername("renamed")).thenReturn(null);
+        when(userRepository.findById(5L)).thenReturn(java.util.Optional.of(existing));
+        when(userUtility.roleTypeOf(existing)).thenReturn(UserRoleType.EMPLOYEE);
+        when(userRepository.save(any(User.class)))
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("duplicate"));
+
+        UserDto dto = new UserDto();
+        dto.setId(5L);
+        dto.setUsername("renamed");
+
+        assertThat(service.setUser(dto).getCode()).isEqualTo("E0104");
+    }
 }
