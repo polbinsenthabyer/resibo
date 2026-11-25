@@ -287,4 +287,61 @@ class UserServiceImplTest {
 
         assertThat(service.setUser(dto).getCode()).isEqualTo("E0104");
     }
+
+    // --- listUsers: pagination, sorting, role filter -----------------------
+
+    @Test
+    void listClampsPageSizeAndFallsBackToIdForUnknownSort() {
+        when(userRepository.search(any(), any(), any(), any(), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(
+                        java.util.List.of(),
+                        org.springframework.data.domain.PageRequest.of(0, 200), 0));
+
+        com.api.resibo.dtos.UserListDto dto = new com.api.resibo.dtos.UserListDto();
+        dto.setSize(10_000);
+        dto.setPage(-5);
+        dto.setSortBy("; DROP TABLE user");
+
+        assertThat(service.listUsers(dto).isSuccess()).isTrue();
+
+        ArgumentCaptor<org.springframework.data.domain.Pageable> pageable =
+                ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
+        verify(userRepository).search(any(), any(), any(), any(), pageable.capture());
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(200);
+        assertThat(pageable.getValue().getPageNumber()).isZero();
+        assertThat(pageable.getValue().getSort().getOrderFor("id")).isNotNull();
+    }
+
+    @Test
+    void listResolvesRoleNameToRoleIdFilter() {
+        when(userUtility.findRoleIdByRoleType(UserRoleType.ADMIN)).thenReturn(1L);
+        when(userRepository.search(any(), any(), any(), any(), any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(
+                        java.util.List.of(),
+                        org.springframework.data.domain.PageRequest.of(0, 10), 0));
+
+        com.api.resibo.dtos.UserListDto dto = new com.api.resibo.dtos.UserListDto();
+        dto.setRole("admin");
+        service.listUsers(dto);
+
+        verify(userRepository).search(any(), any(),
+                org.mockito.ArgumentMatchers.eq(1L), any(),
+                any(org.springframework.data.domain.Pageable.class));
+    }
+
+    @Test
+    void getUnknownIdReturnsNotExist() {
+        when(userRepository.findById(1L)).thenReturn(java.util.Optional.empty());
+        assertThat(service.getUserById(1L).getCode()).isEqualTo("E0201");
+    }
+
+    @Test
+    void getExistingReturnsTheUser() {
+        User u = new User();
+        u.setId(1L);
+        when(userRepository.findById(1L)).thenReturn(java.util.Optional.of(u));
+        ResponseDto res = service.getUserById(1L);
+        assertThat(res.isSuccess()).isTrue();
+        assertThat(res.getData()).isEqualTo(u);
+    }
 }

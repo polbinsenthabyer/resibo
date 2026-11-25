@@ -1,5 +1,6 @@
 package com.api.resibo.services.user;
 
+import com.api.resibo.dtos.PageDto;
 import com.api.resibo.dtos.ResponseDto;
 import com.api.resibo.dtos.UserDto;
 import com.api.resibo.dtos.UserListDto;
@@ -13,10 +14,14 @@ import com.api.resibo.utilities.UserUtility;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -28,6 +33,16 @@ public class UserServiceImpl implements UserService {
     private final SecurityUtil securityUtil;
 
     private static final int MIN_PASSWORD_LENGTH = 8;
+    private static final int MAX_PAGE_SIZE = 200;
+
+    /** Mirrors ProductServiceImpl.SORT_COLUMNS — see that class for why this exists. */
+    private static final Map<String, String> SORT_COLUMNS = Map.of(
+            "id", "id",
+            "username", "username",
+            "name", "name",
+            "createdAt", "created_at",
+            "updatedAt", "updated_at",
+            "lastLoginAt", "last_login_at");
 
     @Override
     @Transactional
@@ -142,13 +157,55 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public ResponseDto listUsers(UserListDto dto) {
-        throw new UnsupportedOperationException("not yet implemented — step group C");
+        if (dto == null) {
+            return ResponseUtility.getErrorResponse("E0001", MessageType.ERROR_DTO_IS_NULL_OR_INCOMPLETE);
+        }
+
+        try {
+            int page = dto.getPage() == null || dto.getPage() < 0 ? 0 : dto.getPage();
+            int size = dto.getSize() == null || dto.getSize() < 1
+                    ? 10 : Math.min(dto.getSize(), MAX_PAGE_SIZE);
+
+            String sortColumn = SORT_COLUMNS.getOrDefault(dto.getSortBy(), "id");
+            Sort.Direction direction = "DESC".equalsIgnoreCase(dto.getSortDirection())
+                    ? Sort.Direction.DESC : Sort.Direction.ASC;
+
+            String rawUsername = dto.getUsername() == null ? null : dto.getUsername().trim();
+            String username = rawUsername == null || rawUsername.isEmpty() ? null : rawUsername;
+            boolean exact = Boolean.TRUE.equals(dto.getIsExactMatch());
+
+            String rawRole = dto.getRole();
+            UserRoleType roleFilter = rawRole == null || rawRole.isBlank() ? null : parseRole(rawRole);
+            Long userRoleId = roleFilter == null ? null : userUtility.findRoleIdByRoleType(roleFilter);
+
+            Page<User> result = userRepository.search(
+                    exact ? username : null,
+                    exact ? null : username,
+                    userRoleId,
+                    dto.getIsActive(),
+                    PageRequest.of(page, size, Sort.by(direction, sortColumn)));
+
+            return ResponseUtility.getSuccessResponse(
+                    MessageType.SUCCESSFULLY_FETCHED_DATA, PageDto.of(result));
+        } catch (Exception e) {
+            log.error("listUsers failed", e);
+            return ResponseUtility.getErrorResponse("E9999", MessageType.ERROR_SOMETHING_WENT_WRONG);
+        }
     }
 
     @Override
+    @Transactional(readOnly = true)
     public ResponseDto getUserById(Long userId) {
-        throw new UnsupportedOperationException("not yet implemented — step group C");
+        if (userId == null) {
+            return ResponseUtility.getErrorResponse("E0001", MessageType.ERROR_DTO_IS_NULL_OR_INCOMPLETE);
+        }
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return ResponseUtility.getErrorResponse("E0201", MessageType.ERROR_USER_NOT_EXIST);
+        }
+        return ResponseUtility.getSuccessResponse(MessageType.SUCCESSFULLY_FETCHED_DATA, user);
     }
 
     @Override
