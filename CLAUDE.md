@@ -113,11 +113,13 @@ envelope, and only uses a real status for 401 and 403. It unwraps `data` or
 throws `ApiError`. **Do not call `fetch` from a component**, and do not add a
 second HTTP path.
 
-Still missing: no login screen, no formatting helper for money or dates —
-§10 is still blank — and no test runner at all. And **no CI deploy yet**:
-both workflows declare a `deploy` job on a runner labelled `resibo-deploy`,
-and no runner carries that label, so releases are the manual commands in
-plan §7.4.
+Still missing: no formatting helper for money or dates — §10 is still blank —
+and no test runner at all. **CI deploy is live for both halves as of
+2026-11-25**: `resibo-deploy` and `resibo-client-deploy` are both registered,
+online self-hosted runners, and both `DEPLOY_ENABLED` and
+`CLIENT_DEPLOY_ENABLED` are `true` — a push touching `server/**` or
+`client/**` deploys automatically. The manual commands in plan §7.3/§7.4
+still work and are the documented fallback.
 
 ## Architecture
 
@@ -349,12 +351,15 @@ not improvise one.
 | Checkout on the server | `/opt/resibo/app`, on `dev/resibo` |
 | Env file | `/opt/resibo/resibo.env`, mode `0600`, outside the checkout and not in git — holds `APP_ENV=prod`, **the datasource credentials** and **`JWT_SECRET`**; the application will not start without it |
 
-**To deploy the API** — manual, on the server. `ci.yml` is gone; there are now
-two workflows, `server-ci.yml` and `client-ci.yml`, each filtered to its own
-half so one never deploys the other (plan §7.4). Their `build` jobs are the
-test gates. Their `deploy` jobs need a self-hosted runner labelled
-`resibo-deploy`, and **no runner carries that label**, so the manual
-procedure is still the real one:
+**The API deploys automatically as of 2026-11-25.** `ci.yml` is gone; there
+are two workflows, `server-ci.yml` and `client-ci.yml`, each filtered to its
+own half so one never deploys the other (plan §7.3/§7.4). Their `build` jobs
+are the test gates; their `deploy` jobs each need a self-hosted runner and a
+repository variable, and both pairs are now live — `resibo-deploy` /
+`DEPLOY_ENABLED` for the API, `resibo-client-deploy` / `CLIENT_DEPLOY_ENABLED`
+for the client. A push to `dev/resibo` touching `server/**` redeploys the API
+with no further action. **To deploy the API by hand** — the documented
+fallback, e.g. if the runner is offline:
 
 ```sh
 cd /opt/resibo/app
